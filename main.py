@@ -7,7 +7,11 @@ def main():
         int x = 5;
         float y = 3.14;
         int[] arr = {1, 2, 3};
+        void print() {
+            return st(t);
+    }
     }''')
+
 
     print(*prog.tree, sep=os.linesep)
 

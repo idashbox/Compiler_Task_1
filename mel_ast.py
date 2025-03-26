@@ -21,7 +21,17 @@ class AstNode(ABC):
             ch0, ch = '├', '│'
             if i == len(childs) - 1:
                 ch0, ch = '└', ' '
-            res.extend(((ch0 if j == 0 else ch) + ' ' + s for j, s in enumerate(child.tree)))
+
+            # Проверка на None
+            if child is not None:
+                # Если child является списком, обработаем каждый элемент в нем
+                if isinstance(child, list):
+                    for subchild in child:
+                        if subchild is not None:
+                            res.extend(((ch0 if j == 0 else ch) + ' ' + s for j, s in enumerate(subchild.tree)))
+                else:
+                    res.extend(((ch0 if j == 0 else ch) + ' ' + s for j, s in enumerate(child.tree)))
+
         return res
 
     def visit(self, func: Callable[['AstNode'], None]) -> None:
@@ -360,3 +370,17 @@ class ReturnNode(StmtNode):
     def __str__(self) -> str:
         return 'return'
 
+class MethodDeclNode(StmtNode):
+    def __init__(self, return_type: IdentNode, name: IdentNode, params: list, body: StmtNode):
+        super().__init__()
+        self.return_type = return_type
+        self.name = name
+        self.params = params
+        self.body = body
+
+    @property
+    def childs(self) -> Tuple[StmtNode]:
+        return (self.body,)
+
+    def __str__(self) -> str:
+        return f'method {self.name} returns {self.return_type}'
