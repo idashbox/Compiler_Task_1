@@ -17,33 +17,43 @@ parser = Lark('''
     BOOL: "true" | "false"
     literal: NUMBER | ESCAPED_STRING | BOOL
     ident: CNAME | /[a-zA-Z_][a-zA-Z0-9_]*/
-    array_type: ident "[" "]"    -> array_type
-    type_decl: CNAME | array_type | type ident "=" expr
-    type: ident | ident "[" "]"  -> array_type
+    DOT: "."
+    %ignore DOT
 
-    ?group: literal
-        | ident
-        | func_call
-        | "(" expr ")"
+    array_type: ident "[" "]" -> array_type
+    type_decl: CNAME | array_type | type ident "=" expr
+    
+    type: ident | ident "[" "]" -> array_type
+    
+    member_access: THIS DOT ident -> member_access
+                 | ident DOT ident -> member_access
+    THIS: "this"
+
+
+    group: literal
+          | ident
+          | func_call
+          | member_access
+          | "(" expr ")"
 
     ?mult: group
-        | mult "*" group    -> mul
-        | mult "/" group    -> div
-        | mult "%" group    -> mod
+        | mult "*" group  -> mul
+        | mult "/" group  -> div
+        | mult "%" group  -> mod
 
     ?add: mult
-        | add "+" mult      -> add
-        | add "-" mult      -> sub
+        | add "+" mult    -> add
+        | add "-" mult    -> sub
 
     ?compare1: add
-        | add ">" add       -> gt
-        | add ">=" add      -> ge
-        | add "<" add       -> lt
-        | add "<=" add      -> le
+        | add ">" add     -> gt
+        | add ">=" add    -> ge
+        | add "<" add     -> lt
+        | add "<=" add    -> le
 
     ?compare2: compare1
-        | compare1 "==" compare1      -> eq
-        | compare1 "!=" compare1      -> ne
+        | compare1 "==" compare1  -> eq
+        | compare1 "!=" compare1  -> ne
 
     ?and: compare2
         | and "&&" compare2
@@ -56,6 +66,7 @@ parser = Lark('''
         | group
 
     ?expr: or
+    | member_access
 
     func_call: ident "(" (expr ("," expr)*)? ")"
 
@@ -72,11 +83,15 @@ parser = Lark('''
     func_decl: type_decl ident "(" (param_decl ("," param_decl)*)? ")" "{" stmt_list "}"
 
     array: "{" (expr ("," expr)*)? "}"  -> array
+    class_decl : "class" ident "{" (constructor_decl | stmt)* "}"
+    constructor_decl: "constructor" "(" param_decl? ")" "{" stmt_list "}"
 
-    class_decl: "class" ident "{" stmt_list? "}"
-    member_access: ident "." ident
+    func_access: ident DOT ident -> func_access 
 
     return_stmt: "return" ";"  -> return_stmt
+    if_stmt: "if" "(" expr ")" stmt ("else" stmt)?
+    while_stmt: "while" "(" expr ")" stmt
+    for_stmt: "for" "(" (stmt1 | none_stmt) ";" (expr | none_expr) ";" (stmt1 | none_stmt) ")" (stmt | ";" none_stmt)
 
     ?stmt1: ident "=" expr   -> assign
         | "return" expr      -> return
@@ -91,20 +106,17 @@ parser = Lark('''
 
     ?stmt: return_stmt | stmt1 ";" | stmt2
 
-
     stmt_list: (stmt ";"*)*
 
     ?prog: stmt_list | class_decl
 
-    ?start: prog
-
+    ?start: prog |
 ''', start="start")
 
 '''
-class MelASTBuilder0(Transformer):
-
+class MelASTBuilder(Transformer):
     def return_stmt(self, _):
-        return ReturnNode(EmptyNode())  # Пустой return
+        return ReturnNode(EmptyNode())
 
     def literal(self, arg: str) -> LiteralNode:
         return LiteralNode(arg)
@@ -112,7 +124,7 @@ class MelASTBuilder0(Transformer):
     def assign(self, ident: IdentNode, expr: ExprNode) -> AssignNode:
         return AssignNode(ident, expr)
 
-    def while(self, cond: IdentNode, body: StmtNode) -> WhileNode:
+    def while_stmt(self, cond: ExprNode, body: StmtNode) -> WhileNode:
         return WhileNode(cond, body)
 
     def add(self, arg1: ExprNode, arg2: ExprNode) -> ExprNode:
@@ -124,7 +136,7 @@ class MelASTBuilder0(Transformer):
     def neg(self, arg: ExprNode) -> ExprNode:
         return UnaryOpNode(UnaryOp.NEG, arg)
 
-    def not(self, arg: ExprNode) -> ExprNode:
+    def not_op(self, arg: ExprNode) -> ExprNode:
         return UnaryOpNode(UnaryOp.NOT, arg)
 
     def empty(self) -> EmptyNode:
@@ -133,33 +145,63 @@ class MelASTBuilder0(Transformer):
     def array(self, *elements):
         return ArrayNode(tuple(elements))
 
-    def class_decl(self, name: IdentNode, body=None):
-    if body is None:
-        body = StmtListNode([])
-    print(f"Создание класса: {name}, с телом: {body}")
-    return ClassDeclNode(name, body)
+    def class_decl(self, name: IdentNode, *members):
+        body = StmtListNode(list(members))
+        print(f"Создание класса: {name}, с членами: {body}")
+        return ClassDeclNode(name, body)
+
+    def constructor_decl(self, params=None, body=None):
+        if params is None:
+            params = []
+        if body is None:
+            body = StmtListNode([])
+        return ConstructorDeclNode(params, body)
 
     def member_access(self, obj, member):
+        if not isinstance(obj, ExprNode):
+            raise TypeError(f"obj must be an instance of ExprNode, got {type(obj)}")
+        if not isinstance(member, IdentNode):
+            raise TypeError(f"member must be an instance of IdentNode, got {type(member)}")
         return MemberAccessNode(obj, member)
 
-    def array_assign(self, array, index):
-        return ArrayAssignNode(array, index)
+
+    def func_access(self, obj, method):
+        return FuncAccessNode(obj, method)
+
+    def array_assign(self, array, index, value):
+        return ArrayAssignNode(array, index, value)
 
     def array_type(self, name):
         return ArrayTypeNode(name)
 
-    def literal(self, value):
-        return LiteralNode(value)
+    def method_decl(self, return_type, name, params=None, body=None):
+        if params is None:
+            params = []
+        if body is None:
+            body = StmtListNode([])
+        print(f"Создание метода: {name}, с параметрами: {params}, с телом: {body}")
+        return MethodDeclNode(return_type, name, params, body)
+
+    def new_expr(self, class_name, *args):
+        return NewExprNode(class_name, list(args))
+        
+    def func_decl(self, return_type, name, params=None, body=None):
+        if params is None:
+            params = []
+        if body is None:
+            body = StmtListNode()
+        return FuncDeclNode(return_type, name, params, body)
+
+    def func_call(self, name, *args):
+        return FuncCallNode(name, args)
 
     def ident(self, name):
         return IdentNode(name)
-
 
 '''
 
 
 class MelASTBuilder(Transformer):
-
     def method_decl(self, return_type, name, params=None, body=None):
         if params is None:
             params = []
@@ -177,73 +219,64 @@ class MelASTBuilder(Transformer):
         return FuncDeclNode(return_type, name, params, body)
 
     def _call_userfunc(self, tree, new_children=None):
-        # Assumes tree is already transformed
         children = new_children if new_children is not None else tree.children
+
+        # Обработка member_access
+        if tree.data == 'member_access':
+            obj, member = children
+            print(f"Обработка member_access: объект {obj} и член {member}")
+            return MemberAccessNode(obj, member)
+
+        # Обработка других типов узлов
         try:
-            f = getattr(self, tree.data)
+            f = getattr(self, tree.data, None)
+            if f is None:
+                return self.__default__(tree.data, children, tree.meta)
         except AttributeError:
+            print(f"Ошибка: метод {tree.data} не найден в {self.__class__.__name__}")
             return self.__default__(tree.data, children, tree.meta)
         else:
-            # Печать для отладки:
             print(f"Обработка узла: {tree.data} с аргументами {children}")
             return f(*children)
 
     def __getattr__(self, item):
-        if isinstance(item, str) and item.upper() == item:
+        if item.upper() == item:
             return lambda x: x
 
-        if item == 'true':
-            return lambda *args: LiteralNode('true')
-
-        if item in ('mul', 'div', 'add', 'sub',
-                    'gt', 'ge', 'lt', 'le', 'eq', 'ne',
-                    'and', 'or'):
+        # Обработка простых операций (например, mul, div и др.)
+        if item in ('mul', 'div', 'add', 'sub', 'gt', 'ge', 'lt', 'le', 'eq', 'ne', 'and', 'or'):
             def get_bin_op_node(arg1, arg2):
                 op = BinOp[item.upper()]
                 return BinOpNode(op, arg1, arg2)
 
             return get_bin_op_node
 
-        # Обработка присваивания
+        # Обработка операций присваивания
         if item == 'assign':
-            def get_assign_node(var, val):
-                return AssignNode(var, val)
+            return lambda var, val: AssignNode(var, val)
 
-            return get_assign_node
-
-        # Обработка присваивания для массивов
         if item == 'array_assign':
-            def get_array_assign_node(array, index):
-                # Убедитесь, что передаете все три аргумента
-                print(f"Обработка присваивания для массива: array={array}, index={index}")
-                return ArrayAssignNode(array, index)
+            return lambda array, index, value: ArrayAssignNode(array, index, value)
 
-            return get_array_assign_node
+        # Динамическое создание узлов
+        def get_node(*args):
+            cls_name = ''.join(x.capitalize() for x in item.split('_')) + 'Node'
+            if cls_name == "ReturnStmtNode":
+                cls_name = "ReturnNode"
+            cls = eval(cls_name)
 
-        # Обработка других типов узлов
-        else:
-            def get_node(*args):
-                cls_name = ''.join(x.capitalize() or '_' for x in item.split('_')) + 'Node'
-                if cls_name == "ReturnStmtNode":
-                    cls_name = "ReturnNode"
-                cls = eval(cls_name)
+            if cls == ArrayNode:
+                return cls(tuple(args))
 
-                if cls == ArrayNode:
-                    return cls(tuple(args))  # Передаем аргументы как кортеж
+            if cls == ReturnNode:
+                return ReturnNode(args[0] if args else None)
 
-                # Проверяем, является ли текущий узел ReturnNode
-                if cls == ReturnNode:
-                    if not args:
-                        return ReturnNode(None)  # Передаём None, если нет аргументов
-                    else:
-                        return ReturnNode(*args)
+            return cls(*args)
 
-                return cls(*args)  # Для всех остальных узлов
-
-            return get_node
+        return get_node
 
     def class_decl(self, name, *members):
-        print(f"Создание класса: {name}, с методами и переменными: {members}, тип: {type(members)}")
+        print(f"Создание класса: {name}, с членами: {members}")
         body = StmtListNode(list(members))
         return ClassDeclNode(name, body)
 

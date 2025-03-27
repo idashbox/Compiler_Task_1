@@ -3,15 +3,15 @@ import mel_parser
 
 
 def main():
-    prog = mel_parser.parse('''class A {
-        int x = 5;
-        float y = 3.14;
-        int[] arr = {1, 2, 3};
-        void print() {
-            return st(t);
+    prog = mel_parser.parse('''
+    class MyClass {
+        int a;
+        void method() { }
+        MyClass constructor(int v) {
+            this.a = v;
+        }
     }
-    }''')
-
+    ''')
 
     print(*prog.tree, sep=os.linesep)
 

@@ -153,10 +153,10 @@ class ArrayNode(ExprNode):
         return 'array'
 
 
-class ClassDeclNode(StmtNode):
-    def __init__(self, name: IdentNode, body: StmtNode):
+class ConstructorDeclNode(StmtNode):
+    def __init__(self, params: list, body: StmtNode):
         super().__init__()
-        self.name = name
+        self.params = params
         self.body = body
 
     @property
@@ -164,12 +164,36 @@ class ClassDeclNode(StmtNode):
         return (self.body,)
 
     def __str__(self) -> str:
+        return 'constructor(...)'
+
+
+class ClassDeclNode(StmtNode):
+    def __init__(self, name: IdentNode, body: StmtNode, constructors: Optional[list] = None):
+        super().__init__()
+        self.name = name
+        self.body = body
+        self.constructors = constructors if constructors else []
+
+    @property
+    def childs(self) -> Tuple[StmtNode]:
+        return (self.body,) + tuple(self.constructors)
+
+    def __str__(self) -> str:
         return f'class {self.name}'
+
+
+class ThisNode(ExprNode):
+    def __str__(self) -> str:
+        return "this"
 
 
 class MemberAccessNode(ExprNode):
     def __init__(self, obj: ExprNode, member: IdentNode):
         super().__init__()
+        if not isinstance(obj, ExprNode):
+            raise TypeError(f"obj must be an instance of ExprNode, got {type(obj)}")
+        if not isinstance(member, IdentNode):
+            raise TypeError(f"member must be an instance of IdentNode, got {type(member)}")
         self.obj = obj
         self.member = member
 
@@ -180,6 +204,13 @@ class MemberAccessNode(ExprNode):
     def __str__(self) -> str:
         return f'{self.obj}.{self.member}'
 
+
+class GroupNode(AstNode):
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return f"GroupNode({self.value})"
 
 class BinOpNode(ExprNode):
     def __init__(self, op: BinOp, arg1: ExprNode, arg2: ExprNode):
