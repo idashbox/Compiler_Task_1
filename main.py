@@ -10,6 +10,20 @@ def main():
         MyClass constructor(int v) {
             this.a = v;
         }
+
+        void test() {
+            for (int i = 0; i < 10; i=i+1) {
+                if (i % 2 == 0) {
+                    a = i;
+                } else {
+                    a = i * 2;
+                }
+            }
+
+            while (a < 50) {
+                a = a + 5;
+            }
+        }
     }
     ''')
 

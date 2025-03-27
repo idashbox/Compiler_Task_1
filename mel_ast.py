@@ -86,9 +86,9 @@ class IdentNode(ExprNode):
 class BinOp(Enum):
     ADD = '+'
     SUB = '-'
+    MOD = '%'
     MUL = '*'
     DIV = '/'
-    MOD = '%'
     GT = '>'
     GE = '>='
     LT = '<'
@@ -210,7 +210,7 @@ class GroupNode(AstNode):
         self.value = value
 
     def __str__(self):
-        return f"GroupNode({self.value})"
+        return f"{self.value}"
 
 class BinOpNode(ExprNode):
     def __init__(self, op: BinOp, arg1: ExprNode, arg2: ExprNode):
@@ -255,20 +255,6 @@ class AssignNode(StmtNode):
         return '='
 
 
-class WhileNode(StmtNode):
-    def __init__(self, cond: ExprNode, body: StmtNode):
-        super().__init__()
-        self.cond = cond
-        self.body = body
-
-    @property
-    def childs(self) -> Tuple[ExprNode, StmtNode]:
-        return self.cond, self.body
-
-    def __str__(self) -> str:
-        return 'while'
-
-
 class IfNode(StmtNode):
     def __init__(self, cond: ExprNode, then_stmt: StmtNode, else_stmt: Optional[StmtNode] = None):
         super().__init__()
@@ -282,6 +268,20 @@ class IfNode(StmtNode):
 
     def __str__(self) -> str:
         return 'if'
+
+
+class WhileNode(StmtNode):
+    def __init__(self, cond: ExprNode, body: StmtNode):
+        super().__init__()
+        self.cond = cond
+        self.body = body
+
+    @property
+    def childs(self) -> Tuple[ExprNode, StmtNode]:
+        return self.cond, self.body
+
+    def __str__(self) -> str:
+        return 'while'
 
 
 class ForNode(StmtNode):

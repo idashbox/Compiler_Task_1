@@ -22,9 +22,7 @@ parser = Lark('''
 
     array_type: ident "[" "]" -> array_type
     type_decl: CNAME | array_type | type ident "=" expr
-    
     type: ident | ident "[" "]" -> array_type
-    
     member_access: THIS DOT ident -> member_access
                  | ident DOT ident -> member_access
     THIS: "this"
@@ -42,8 +40,13 @@ parser = Lark('''
         | mult "%" group  -> mod
 
     ?add: mult
-        | add "+" mult    -> add
-        | add "-" mult    -> sub
+     | add "+" mult   -> add
+     | add "-" mult   -> sub
+        
+    ?inc_dec: ident "++" -> inc
+        | ident "--" -> dec
+        | add "+" mult -> add
+        | add "-" mult -> sub
 
     ?compare1: add
         | add ">" add     -> gt
@@ -67,6 +70,9 @@ parser = Lark('''
 
     ?expr: or
     | member_access
+    | "this" DOT ident -> member_access
+    | ident
+    | "(" expr ")" 
 
     func_call: ident "(" (expr ("," expr)*)? ")"
 
@@ -89,12 +95,17 @@ parser = Lark('''
     func_access: ident DOT ident -> func_access 
 
     return_stmt: "return" ";"  -> return_stmt
-    if_stmt: "if" "(" expr ")" stmt ("else" stmt)?
-    while_stmt: "while" "(" expr ")" stmt
-    for_stmt: "for" "(" (stmt1 | none_stmt) ";" (expr | none_expr) ";" (stmt1 | none_stmt) ")" (stmt | ";" none_stmt)
+    if_stmt: "if" "(" expr ")" stmt ("else" stmt)? -> if_stmt
+    while_stmt: "while" "(" expr ")" stmt -> while_stmt
+    for_stmt: "for" "(" (stmt1 | none_stmt) ";" (expr | none_expr) ";" (stmt1 | none_stmt) ")" stmt -> for_stmt
 
     ?stmt1: ident "=" expr   -> assign
         | "return" expr      -> return
+        | var_decl
+        | if_stmt
+        | while_stmt
+        | for_stmt
+        | stmt_list
         | func_call
         | vars_decl
 
@@ -104,10 +115,9 @@ parser = Lark('''
         | "for" "(" (stmt1 | none_stmt) ";" (expr | none_expr) ";" (stmt1 | none_stmt) ")" (stmt | ";" none_stmt)  -> for
         | func_decl
 
-    ?stmt: return_stmt | stmt1 ";" | stmt2
+    ?stmt: return_stmt | stmt1 ";" | stmt2 
 
-    stmt_list: (stmt ";"*)*
-
+    stmt_list: (stmt ";"*)* | stmt*
     ?prog: stmt_list | class_decl
 
     ?start: prog |
@@ -129,6 +139,9 @@ class MelASTBuilder(Transformer):
 
     def add(self, arg1: ExprNode, arg2: ExprNode) -> ExprNode:
         return BinOpNode(BinOp.ADD, arg1, arg2)
+        
+    def mod(self, arg1: ExprNode, arg2: ExprNode) -> ExprNode:
+        return BinOpNode(BinOp.MOD, arg1, arg2)
 
     def sub(self, arg1: ExprNode, arg2: ExprNode) -> ExprNode:
         return BinOpNode(BinOp.SUB, arg1, arg2)
@@ -158,12 +171,16 @@ class MelASTBuilder(Transformer):
         return ConstructorDeclNode(params, body)
 
     def member_access(self, obj, member):
+    # Проверяем, является ли obj (левая часть) "this"
+    if isinstance(obj, str) and obj == "this":
+        return MemberAccessNode(obj, member)
+    else:
+        # Прочие случаи для member_access
         if not isinstance(obj, ExprNode):
             raise TypeError(f"obj must be an instance of ExprNode, got {type(obj)}")
         if not isinstance(member, IdentNode):
             raise TypeError(f"member must be an instance of IdentNode, got {type(member)}")
         return MemberAccessNode(obj, member)
-
 
     def func_access(self, obj, method):
         return FuncAccessNode(obj, method)
@@ -196,7 +213,10 @@ class MelASTBuilder(Transformer):
         return FuncCallNode(name, args)
 
     def ident(self, name):
+        if name == "this":
+            return IdentNode("this")
         return IdentNode(name)
+
 
 '''
 
@@ -223,6 +243,7 @@ class MelASTBuilder(Transformer):
 
         # Обработка member_access
         if tree.data == 'member_access':
+            print(f"Обработка узла: {tree.data} с аргументами {tree.children}")
             obj, member = children
             print(f"Обработка member_access: объект {obj} и член {member}")
             return MemberAccessNode(obj, member)
@@ -244,7 +265,7 @@ class MelASTBuilder(Transformer):
             return lambda x: x
 
         # Обработка простых операций (например, mul, div и др.)
-        if item in ('mul', 'div', 'add', 'sub', 'gt', 'ge', 'lt', 'le', 'eq', 'ne', 'and', 'or'):
+        if item in ('mul', 'div', 'add', 'sub', 'gt', 'ge', 'lt', 'le', 'eq', 'ne', 'and', 'or', 'mod'):
             def get_bin_op_node(arg1, arg2):
                 op = BinOp[item.upper()]
                 return BinOpNode(op, arg1, arg2)
