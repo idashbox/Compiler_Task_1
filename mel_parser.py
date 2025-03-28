@@ -27,11 +27,11 @@ parser = Lark('''
                  | ident DOT ident -> member_access
     THIS: "this"
 
-    
+
     new_expr: "new" ident ("[" expr "]")+ -> new_array
         | "new" ident "(" (expr ("," expr)*)? ")" -> new_object
-        
-        
+
+
     group: literal
           | ident
           | func_call
@@ -46,7 +46,7 @@ parser = Lark('''
     ?add: mult
      | add "+" mult   -> add
      | add "-" mult   -> sub
-        
+
     ?inc_dec: ident "++" -> inc
         | ident "--" -> dec
         | add "+" mult -> add
@@ -74,9 +74,6 @@ parser = Lark('''
 
     array_access: ident "[" expr "]" -> array_access
 
-    array_assign: array_access "=" expr -> array_assign
-            | ident "=" array -> array_init
-
     ?expr: or
         | array_access
         | member_access
@@ -84,19 +81,19 @@ parser = Lark('''
         | ident
         | "(" expr ")" 
         | new_expr
-        
+
     func_call: ident "(" (expr ("," expr)*)? ")"
 
     none_stmt:   -> stmt_list
     none_expr: -> empty
-    
+
 
     ?var_decl: ident
         | ident "=" expr     -> assign
         | ident "=" array   -> array_init
-        | ident "[" expr "]" "=" expr -> array_assign
+
     vars_decl: type_decl var_decl ("," var_decl)*
-    
+
 
     param_decl: type_decl ident  -> vars_decl
     func_decl: type_decl ident "(" (param_decl ("," param_decl)*)? ")" "{" stmt_list "}"
@@ -111,10 +108,11 @@ parser = Lark('''
     if_stmt: "if" "(" expr ")" stmt ("else" stmt)? -> if_stmt
     while_stmt: "while" "(" expr ")" stmt -> while_stmt
     for_stmt: "for" "(" (stmt1 | none_stmt) ";" (expr | none_expr) ";" (stmt1 | none_stmt) ")" stmt -> for_stmt
-    
+
     new_array_init: "new" ident "[" expr "]" "{" (expr ("," expr)*)? "}" -> new_array_init
 
     ?stmt1: ident "=" expr   -> assign
+        | array_access "=" expr -> array_assign
         | "return" expr      -> return
         | var_decl
         | if_stmt
@@ -137,130 +135,6 @@ parser = Lark('''
 
     ?start: prog |
 ''', start="start")
-
-'''
-class MelASTBuilder(Transformer):
-    def return_stmt(self, _):
-        return ReturnNode(EmptyNode())
-
-    def literal(self, arg: str) -> LiteralNode:
-        return LiteralNode(arg)
-
-    def assign(self, ident: IdentNode, expr: ExprNode) -> AssignNode:
-        return AssignNode(ident, expr)
-
-    def while_stmt(self, cond: ExprNode, body: StmtNode) -> WhileNode:
-        return WhileNode(cond, body)
-
-    def add(self, arg1: ExprNode, arg2: ExprNode) -> ExprNode:
-        return BinOpNode(BinOp.ADD, arg1, arg2)
-        
-    def mod(self, arg1: ExprNode, arg2: ExprNode) -> ExprNode:
-        return BinOpNode(BinOp.MOD, arg1, arg2)
-
-    def sub(self, arg1: ExprNode, arg2: ExprNode) -> ExprNode:
-        return BinOpNode(BinOp.SUB, arg1, arg2)
-
-    def neg(self, arg: ExprNode) -> ExprNode:
-        return UnaryOpNode(UnaryOp.NEG, arg)
-
-    def not_op(self, arg: ExprNode) -> ExprNode:
-        return UnaryOpNode(UnaryOp.NOT, arg)
-
-    def empty(self) -> EmptyNode:
-        return EmptyNode()
-
-    def array(self, *elements):
-        return ArrayNode(tuple(elements))
-
-    def class_decl(self, name: IdentNode, *members):
-        body = StmtListNode(list(members))
-        print(f"Создание класса: {name}, с членами: {body}")
-        return ClassDeclNode(name, body)
-
-    def constructor_decl(self, params=None, body=None):
-        if params is None:
-            params = []
-        if body is None:
-            body = StmtListNode([])
-        return ConstructorDeclNode(params, body)
-
-    def member_access(self, obj, member):
-    # Проверяем, является ли obj (левая часть) "this"
-    if isinstance(obj, str) and obj == "this":
-        return MemberAccessNode(obj, member)
-    else:
-        # Прочие случаи для member_access
-        if not isinstance(obj, ExprNode):
-            raise TypeError(f"obj must be an instance of ExprNode, got {type(obj)}")
-        if not isinstance(member, IdentNode):
-            raise TypeError(f"member must be an instance of IdentNode, got {type(member)}")
-        return MemberAccessNode(obj, member)
-
-    def func_access(self, obj, method):
-        return FuncAccessNode(obj, method)
-
-    def array_assign(self, array, index, value):
-        return ArrayAssignNode(array, index, value)
-
-    def array_init(self, ident, array):
-        return ArrayAssignNode(ident, array)
-    
-    def array_type(self, name):
-        return ArrayTypeNode(name)
-
-    def method_decl(self, return_type, name, params=None, body=None):
-        if params is None:
-            params = []
-        if body is None:
-            body = StmtListNode([])
-        print(f"Создание метода: {name}, с параметрами: {params}, с телом: {body}")
-        return MethodDeclNode(return_type, name, params, body)
-
-    def new_expr(self, class_name, *args):
-        return NewExprNode(class_name, list(args))
-        
-    def func_decl(self, return_type, name, params=None, body=None):
-        if params is None:
-            params = []
-        if body is None:
-            body = StmtListNode()
-        return FuncDeclNode(return_type, name, params, body)
-
-    def func_call(self, name, *args):
-        return FuncCallNode(name, args)
-
-    def ident(self, name):
-        if name == "this":
-            return IdentNode("this")
-        return IdentNode(name)
-        
-    
-    def new_array(self, type_name, *dimensions):
-        # Обрабатываем многомерные массивы
-        current_node = NewArrayNode(type_name, dimensions[-1])
-        for dim in reversed(dimensions[:-1]):
-            current_node = NewArrayNode(type_name, dim)
-            # Здесь нужно адаптировать для поддержки многомерных массивов
-        return current_node
-        
-    def new_object(self, class_name, *args):
-        return NewObjectNode(class_name, args)
-        
-    def new_array_init(self, type_name, size, *elements):
-        return NewArrayInitNode(type_name, size, elements)
-        
-    def array_access(self, array, index):
-        return ArrayAccessNode(array, index)
-
-    def array_assign(self, array_access, value):
-        return ArrayAssignNode(array_access, value)
-
-    def array_init(self, ident, array):
-        return ArrayAssignNode(ident, array)
-
-
-'''
 
 
 class MelASTBuilder(Transformer):
@@ -320,10 +194,10 @@ class MelASTBuilder(Transformer):
 
         if item in ('array_assign', 'array_init'):
             # Оба случая используют ArrayAssignNode
-            if item == 'array_assign':
-                return lambda array, index, value: ArrayAssignNode(array, index, value)
-            else:
-                return lambda ident, array: ArrayAssignNode(ident, array)
+            def array_assign_handler(target, value):
+                return ArrayAssignNode(target, value)
+
+            return array_assign_handler
 
         # Динамическое создание узлов
         def get_node(*args):
@@ -348,6 +222,7 @@ class MelASTBuilder(Transformer):
             return cls(*args)
 
         return get_node
+
     def class_decl(self, name, *members):
         print(f"Создание класса: {name}, с членами: {members}")
         body = StmtListNode(list(members))
@@ -365,5 +240,3 @@ class MelTransformer(Transformer):
         if args:
             return ReturnNode(args[0])
         return ReturnNode(EmptyNode())  # Передаём пустой узел
-
-
