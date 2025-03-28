@@ -23,9 +23,17 @@ def main():
             while (a < 50) {
                 a = a + 5;
             }
+            
+            int[] arr = new int[10];
+            
+
         }
     }
     ''')
+
+    # prog = mel_parser.parse('''
+    #     int[] arr = new int[10];
+    #     ''')
 
     print(*prog.tree, sep=os.linesep)
 

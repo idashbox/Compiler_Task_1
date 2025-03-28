@@ -27,7 +27,11 @@ parser = Lark('''
                  | ident DOT ident -> member_access
     THIS: "this"
 
-
+    
+    new_expr: "new" ident ("[" expr "]")+ -> new_array
+        | "new" ident "(" (expr ("," expr)*)? ")" -> new_object
+        
+        
     group: literal
           | ident
           | func_call
@@ -73,6 +77,7 @@ parser = Lark('''
     | "this" DOT ident -> member_access
     | ident
     | "(" expr ")" 
+    | new_expr
 
     func_call: ident "(" (expr ("," expr)*)? ")"
 
@@ -216,6 +221,18 @@ class MelASTBuilder(Transformer):
         if name == "this":
             return IdentNode("this")
         return IdentNode(name)
+        
+    
+    def new_array(self, type_name, *dimensions):
+        # Обрабатываем многомерные массивы
+        current_node = NewArrayNode(type_name, dimensions[-1])
+        for dim in reversed(dimensions[:-1]):
+            current_node = NewArrayNode(type_name, dim)
+            # Здесь нужно адаптировать для поддержки многомерных массивов
+        return current_node
+        
+    def new_object(self, class_name, *args):
+        return NewObjectNode(class_name, args)
 
 
 '''

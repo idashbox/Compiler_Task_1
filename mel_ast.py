@@ -415,3 +415,33 @@ class MethodDeclNode(StmtNode):
 
     def __str__(self) -> str:
         return f'method {self.name} returns {self.return_type}'
+
+
+
+
+class NewArrayNode(ExprNode):
+    def __init__(self, type_name: IdentNode, size: ExprNode):
+        super().__init__()
+        self.type_name = type_name
+        self.size = size
+
+    @property
+    def childs(self) -> Tuple[ExprNode]:
+        return (self.size,)
+
+    def __str__(self) -> str:
+        return f'new {self.type_name}[{self.size}]'
+
+
+class NewObjectNode(ExprNode):
+    def __init__(self, class_name: IdentNode, args: Tuple[ExprNode, ...]):
+        super().__init__()
+        self.class_name = class_name
+        self.args = args
+
+    @property
+    def childs(self) -> Tuple[ExprNode, ...]:
+        return self.args
+
+    def __str__(self) -> str:
+        return f'new {self.class_name}({", ".join(map(str, self.args))})'
