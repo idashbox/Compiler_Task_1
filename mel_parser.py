@@ -106,6 +106,8 @@ parser = Lark('''
     if_stmt: "if" "(" expr ")" stmt ("else" stmt)? -> if_stmt
     while_stmt: "while" "(" expr ")" stmt -> while_stmt
     for_stmt: "for" "(" (stmt1 | none_stmt) ";" (expr | none_expr) ";" (stmt1 | none_stmt) ")" stmt -> for_stmt
+    
+    new_array_init: "new" ident "[" expr "]" "{" (expr ("," expr)*)? "}" -> new_array_init
 
     ?stmt1: ident "=" expr   -> assign
         | "return" expr      -> return
@@ -239,6 +241,9 @@ class MelASTBuilder(Transformer):
         
     def new_object(self, class_name, *args):
         return NewObjectNode(class_name, args)
+        
+    def new_array_init(self, type_name, size, *elements):
+        return NewArrayInitNode(type_name, size, elements)
         
 
 

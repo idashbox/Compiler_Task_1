@@ -61,6 +61,7 @@ def main():
             }
             
             int[] arr = new int[10];
+            arr = {1, 2, 3, 4, 5};
             int[] arr2 = {1, 2, 3};
             int[] arr3 = {1, 2, 3};
 

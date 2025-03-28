@@ -448,3 +448,16 @@ class NewObjectNode(ExprNode):
     def __str__(self) -> str:
         return f'new {self.class_name}({", ".join(map(str, self.args))})'
 
+
+class NewArrayInitNode(ExprNode):
+    def __init__(self, type_name, size, elements):
+        self.type_name = type_name
+        self.size = size
+        self.elements = elements
+
+    @property
+    def childs(self):
+        return (self.size,) + self.elements
+
+    def __str__(self):
+        return f'new {self.type_name}[{self.size}]{{...}}'
