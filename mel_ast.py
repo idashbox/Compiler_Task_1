@@ -314,31 +314,17 @@ class StmtListNode(StmtNode):
 
 
 class ArrayAssignNode(StmtNode):
-    def __init__(self, target, value_or_index, value=None):
+    def __init__(self, target: ExprNode, value: ExprNode):
         super().__init__()
         self.target = target
-        if value is None:
-            # Случай array_init: ident = array
-            self.is_init = True
-            self.array = value_or_index
-            self.index = None
-            self.value = None
-        else:
-            # Случай array_assign: ident[index] = value
-            self.is_init = False
-            self.array = None
-            self.index = value_or_index
-            self.value = value
+        self.value = value
 
     @property
-    def childs(self):
-        if self.is_init:
-            return (self.target, self.array)
-        return (self.target, self.index, self.value)
+    def childs(self) -> Tuple[ExprNode, ExprNode]:
+        return self.target, self.value
 
-    def __str__(self):
-        return "array_init" if self.is_init else "array_assign"
-
+    def __str__(self) -> str:
+        return '=[]'
 
 class TypeDeclNode:
     def __init__(self, typename):
@@ -461,3 +447,19 @@ class NewArrayInitNode(ExprNode):
 
     def __str__(self):
         return f'new {self.type_name}[{self.size}]{{...}}'
+
+
+
+
+class ArrayAccessNode(ExprNode):
+    def __init__(self, array: ExprNode, index: ExprNode):
+        super().__init__()
+        self.array = array
+        self.index = index
+
+    @property
+    def childs(self) -> Tuple[ExprNode, ExprNode]:
+        return self.array, self.index
+
+    def __str__(self) -> str:
+        return '[]'

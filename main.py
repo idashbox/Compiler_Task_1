@@ -41,7 +41,7 @@ def main():
 
     prog = mel_parser.parse('''
     class MyClass {
-        int a;
+        int a = 5;
         void method() { }
         MyClass constructor(int v) {
             this.a = v;

@@ -72,19 +72,24 @@ parser = Lark('''
         | "!" unary      -> not
         | group
 
-    ?expr: or
-    | member_access
-    | "this" DOT ident -> member_access
-    | ident
-    | "(" expr ")" 
-    | new_expr
+    array_access: ident "[" expr "]" -> array_access
 
+    array_assign: array_access "=" expr -> array_assign
+            | ident "=" array -> array_init
+
+    ?expr: or
+        | array_access
+        | member_access
+        | "this" DOT ident -> member_access
+        | ident
+        | "(" expr ")" 
+        | new_expr
+        
     func_call: ident "(" (expr ("," expr)*)? ")"
 
     none_stmt:   -> stmt_list
     none_expr: -> empty
-    array_assign: ident "[" expr "]" "=" expr -> array_assign
-            | ident "=" array -> array_init
+    
 
     ?var_decl: ident
         | ident "=" expr     -> assign
@@ -245,6 +250,14 @@ class MelASTBuilder(Transformer):
     def new_array_init(self, type_name, size, *elements):
         return NewArrayInitNode(type_name, size, elements)
         
+    def array_access(self, array, index):
+        return ArrayAccessNode(array, index)
+
+    def array_assign(self, array_access, value):
+        return ArrayAssignNode(array_access, value)
+
+    def array_init(self, ident, array):
+        return ArrayAssignNode(ident, array)
 
 
 '''
