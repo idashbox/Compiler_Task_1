@@ -84,11 +84,14 @@ parser = Lark('''
     none_stmt:   -> stmt_list
     none_expr: -> empty
     array_assign: ident "[" expr "]" "=" expr -> array_assign
+            | ident "=" array -> array_init
 
     ?var_decl: ident
         | ident "=" expr     -> assign
-        | ident "=" array   -> array_assign
+        | ident "=" array   -> array_init
+        | ident "[" expr "]" "=" expr -> array_assign
     vars_decl: type_decl var_decl ("," var_decl)*
+    
 
     param_decl: type_decl ident  -> vars_decl
     func_decl: type_decl ident "(" (param_decl ("," param_decl)*)? ")" "{" stmt_list "}"
@@ -193,6 +196,9 @@ class MelASTBuilder(Transformer):
     def array_assign(self, array, index, value):
         return ArrayAssignNode(array, index, value)
 
+    def array_init(self, ident, array):
+        return ArrayAssignNode(ident, array)
+    
     def array_type(self, name):
         return ArrayTypeNode(name)
 
@@ -233,6 +239,7 @@ class MelASTBuilder(Transformer):
         
     def new_object(self, class_name, *args):
         return NewObjectNode(class_name, args)
+        
 
 
 '''
@@ -281,7 +288,7 @@ class MelASTBuilder(Transformer):
         if item.upper() == item:
             return lambda x: x
 
-        # Обработка простых операций (например, mul, div и др.)
+        # Обработка простых операций (mul, div и др.)
         if item in ('mul', 'div', 'add', 'sub', 'gt', 'ge', 'lt', 'le', 'eq', 'ne', 'and', 'or', 'mod'):
             def get_bin_op_node(arg1, arg2):
                 op = BinOp[item.upper()]
@@ -289,30 +296,40 @@ class MelASTBuilder(Transformer):
 
             return get_bin_op_node
 
-        # Обработка операций присваивания
+        # Обработка специальных случаев
         if item == 'assign':
             return lambda var, val: AssignNode(var, val)
 
-        if item == 'array_assign':
-            return lambda array, index, value: ArrayAssignNode(array, index, value)
+        if item in ('array_assign', 'array_init'):
+            # Оба случая используют ArrayAssignNode
+            if item == 'array_assign':
+                return lambda array, index, value: ArrayAssignNode(array, index, value)
+            else:
+                return lambda ident, array: ArrayAssignNode(ident, array)
 
         # Динамическое создание узлов
         def get_node(*args):
             cls_name = ''.join(x.capitalize() for x in item.split('_')) + 'Node'
+
+            # Специальные случаи именования
             if cls_name == "ReturnStmtNode":
                 cls_name = "ReturnNode"
-            cls = eval(cls_name)
 
+            try:
+                cls = eval(cls_name)
+            except NameError:
+                raise NameError(
+                    f"Node class {cls_name} not defined. Did you mean: {[n for n in globals() if 'Node' in n]}")
+
+            # Специальная обработка некоторых классов
             if cls == ArrayNode:
                 return cls(tuple(args))
-
             if cls == ReturnNode:
                 return ReturnNode(args[0] if args else None)
 
             return cls(*args)
 
         return get_node
-
     def class_decl(self, name, *members):
         print(f"Создание класса: {name}, с членами: {members}")
         body = StmtListNode(list(members))

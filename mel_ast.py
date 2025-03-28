@@ -314,28 +314,30 @@ class StmtListNode(StmtNode):
 
 
 class ArrayAssignNode(StmtNode):
-    def __init__(self, ident, array):
+    def __init__(self, target, value_or_index, value=None):
         super().__init__()
-        self.ident = ident
-        self.array = array
+        self.target = target
+        if value is None:
+            # Случай array_init: ident = array
+            self.is_init = True
+            self.array = value_or_index
+            self.index = None
+            self.value = None
+        else:
+            # Случай array_assign: ident[index] = value
+            self.is_init = False
+            self.array = None
+            self.index = value_or_index
+            self.value = value
 
     @property
-    def childs(self) -> Tuple[AstNode, ...]:
-        return (self.ident, self.array)
+    def childs(self):
+        if self.is_init:
+            return (self.target, self.array)
+        return (self.target, self.index, self.value)
 
     def __str__(self):
-        return f"{self.ident} = {self.array}"
-
-    @property
-    def tree(self) -> [str, ...]:
-        res = [str(self)]
-        childs = self.childs
-        for i, child in enumerate(childs):
-            ch0, ch = '├', '│'
-            if i == len(childs) - 1:
-                ch0, ch = '└', ' '
-            res.extend(((ch0 if j == 0 else ch) + ' ' + s for j, s in enumerate(child.tree)))
-        return res
+        return "array_init" if self.is_init else "array_assign"
 
 
 class TypeDeclNode:
@@ -445,3 +447,4 @@ class NewObjectNode(ExprNode):
 
     def __str__(self) -> str:
         return f'new {self.class_name}({", ".join(map(str, self.args))})'
+
