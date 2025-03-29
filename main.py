@@ -66,6 +66,7 @@ def main():
             int[] arr3 = {1, 2, 3};
             x = arr[10];
             arr[0] = 1;
+            A g = new A(3);
         }
     }
     ''')

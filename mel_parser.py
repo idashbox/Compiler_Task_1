@@ -1,4 +1,4 @@
-from lark import Lark, Transformer
+from lark import Lark, Transformer, Tree, Token
 from mel_ast import *
 
 parser = Lark('''
@@ -23,8 +23,8 @@ parser = Lark('''
     array_type: ident "[" "]" -> array_type
     type_decl: CNAME | array_type | type ident "=" expr
     type: ident | ident "[" "]" -> array_type
-    member_access: THIS DOT ident -> member_access
-                 | ident DOT ident -> member_access
+    member_access: THIS "." ident -> member_access
+                | ident "." ident -> member_access
     THIS: "this"
 
 
@@ -90,7 +90,7 @@ parser = Lark('''
 
     ?var_decl: ident
         | ident "=" expr     -> assign
-        | ident "=" array   -> array_init
+        | ident "=" array   -> assign
 
     vars_decl: type_decl var_decl ("," var_decl)*
 
@@ -111,8 +111,7 @@ parser = Lark('''
 
     new_array_init: "new" ident "[" expr "]" "{" (expr ("," expr)*)? "}" -> new_array_init
 
-    ?stmt1: ident "=" expr   -> assign
-        | array_access "=" expr -> array_assign
+    ?stmt1: expr "=" expr   -> assign  
         | "return" expr      -> return
         | var_decl
         | if_stmt
@@ -162,7 +161,7 @@ class MelASTBuilder(Transformer):
             print(f"Обработка узла: {tree.data} с аргументами {tree.children}")
             obj, member = children
             print(f"Обработка member_access: объект {obj} и член {member}")
-            return MemberAccessNode(obj, member)
+            return self.member_access(*children)
 
         # Обработка других типов узлов
         try:
@@ -175,6 +174,9 @@ class MelASTBuilder(Transformer):
         else:
             print(f"Обработка узла: {tree.data} с аргументами {children}")
             return f(*children)
+
+    def assign(self, var, val):
+        return AssignNode(var, val)
 
     def __getattr__(self, item):
         if item.upper() == item:
@@ -191,13 +193,6 @@ class MelASTBuilder(Transformer):
         # Обработка специальных случаев
         if item == 'assign':
             return lambda var, val: AssignNode(var, val)
-
-        if item in ('array_assign', 'array_init'):
-            # Оба случая используют ArrayAssignNode
-            def array_assign_handler(target, value):
-                return ArrayAssignNode(target, value)
-
-            return array_assign_handler
 
         # Динамическое создание узлов
         def get_node(*args):
@@ -227,6 +222,20 @@ class MelASTBuilder(Transformer):
         print(f"Создание класса: {name}, с членами: {members}")
         body = StmtListNode(list(members))
         return ClassDeclNode(name, body)
+
+    def member_access(self, obj, member):
+        # Преобразуем obj в IdentNode, если это токен
+        if isinstance(obj, Token):
+            if obj.type == 'THIS':
+                obj = ThisNode()  # Создаем узел для 'this'
+            else:
+                obj = IdentNode(str(obj))  # Преобразуем ident в IdentNode
+
+        if isinstance(member, Tree):
+            member_name = str(member.children[0])  # Извлекаем имя из Tree
+        else:
+            member_name = str(member)
+        return MemberAccessNode(obj, IdentNode(member_name))
 
 
 def parse(prog: str) -> StmtListNode:

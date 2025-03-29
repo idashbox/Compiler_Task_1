@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from contextlib import suppress
-from typing import Callable, Tuple, Any, Optional, Union
+from typing import Callable, Tuple, Any, Optional, Union, List
 from enum import Enum
 
 
@@ -14,23 +14,30 @@ class AstNode(ABC):
         pass
 
     @property
-    def tree(self) -> [str, ...]:
+    def tree(self) -> List[str]:  # Исправлен тип возвращаемого значения
         res = [str(self)]
         childs = self.childs
-        for i, child in enumerate(childs):
-            ch0, ch = '├', '│'
-            if i == len(childs) - 1:
-                ch0, ch = '└', ' '
 
-            # Проверка на None
-            if child is not None:
-                # Если child является списком, обработаем каждый элемент в нем
-                if isinstance(child, list):
-                    for subchild in child:
-                        if subchild is not None:
-                            res.extend(((ch0 if j == 0 else ch) + ' ' + s for j, s in enumerate(subchild.tree)))
-                else:
-                    res.extend(((ch0 if j == 0 else ch) + ' ' + s for j, s in enumerate(child.tree)))
+        if childs:
+            if isinstance(childs, (list, tuple)):
+                num_children = len(childs)
+                for i, child in enumerate(childs):
+                    ch0, ch = '├', '│'
+                    if i == num_children - 1:
+                        ch0, ch = '└', ' '
+
+                    # Проверка на None
+                    if child is not None:
+                        # Если child является списком, обработаем каждый элемент в нем
+                        if isinstance(child, list):
+                            for j, subchild in enumerate(child):
+                                if subchild is not None:
+                                    res.extend(((ch0 if k == 0 else ch) + ' ' + s for k, s in enumerate(subchild.tree)))
+                        else:
+                            res.extend(((ch0 if j == 0 else ch) + ' ' + s for j, s in enumerate(child.tree)))
+            else:  # childs - это отдельный узел (например, GroupNode)
+                ch0, ch = '└', ' '  # Можно настроить префиксы для одного дочернего элемента
+                res.extend(((ch0 if j == 0 else ch) + ' ' + s for j, s in enumerate(childs.tree)))
 
         return res
 
@@ -212,6 +219,7 @@ class GroupNode(AstNode):
     def __str__(self):
         return f"{self.value}"
 
+
 class BinOpNode(ExprNode):
     def __init__(self, op: BinOp, arg1: ExprNode, arg2: ExprNode):
         super().__init__()
@@ -242,13 +250,13 @@ class FuncCallNode(ExprNode):
 
 
 class AssignNode(StmtNode):
-    def __init__(self, var: IdentNode, val: ExprNode):
+    def __init__(self, var: ExprNode, val: ExprNode):  # var теперь ExprNode
         super().__init__()
-        self.var = var
+        self.var = var  # Может быть IdentNode, ArrayAccessNode, MemberAccessNode и т.д.
         self.val = val
 
     @property
-    def childs(self) -> Tuple[IdentNode, ExprNode]:
+    def childs(self) -> Tuple[ExprNode, ExprNode]:
         return self.var, self.val
 
     def __str__(self) -> str:
@@ -264,7 +272,7 @@ class IfNode(StmtNode):
 
     @property
     def childs(self) -> Tuple[ExprNode, StmtNode]:
-        return (self.cond, self.then_stmt) + ((self.else_stmt, ) if self.else_stmt else tuple())
+        return (self.cond, self.then_stmt) + ((self.else_stmt,) if self.else_stmt else tuple())
 
     def __str__(self) -> str:
         return 'if'
@@ -313,19 +321,6 @@ class StmtListNode(StmtNode):
         return '...'
 
 
-class ArrayAssignNode(StmtNode):
-    def __init__(self, target: ExprNode, value: ExprNode):
-        super().__init__()
-        self.target = target
-        self.value = value
-
-    @property
-    def childs(self) -> Tuple[ExprNode, ExprNode]:
-        return self.target, self.value
-
-    def __str__(self) -> str:
-        return '=[]'
-
 class TypeDeclNode:
     def __init__(self, typename):
         if isinstance(typename, ArrayTypeNode):
@@ -361,6 +356,7 @@ class VarsDeclNode(StmtNode):
     def __str__(self) -> str:
         return f'var ({str(self.type)})'
 
+
 class FuncDeclNode(StmtNode):
     def __init__(self, type: IdentNode, name: IdentNode, *params_and_body: VarsDeclNode):
         super().__init__()
@@ -389,6 +385,7 @@ class ReturnNode(StmtNode):
     def __str__(self) -> str:
         return 'return'
 
+
 class MethodDeclNode(StmtNode):
     def __init__(self, return_type: IdentNode, name: IdentNode, params: list, body: StmtNode):
         super().__init__()
@@ -403,8 +400,6 @@ class MethodDeclNode(StmtNode):
 
     def __str__(self) -> str:
         return f'method {self.name} returns {self.return_type}'
-
-
 
 
 class NewArrayNode(ExprNode):
@@ -431,8 +426,10 @@ class NewObjectNode(ExprNode):
     def childs(self) -> Tuple[ExprNode, ...]:
         return self.args
 
+    # def __str__(self) -> str:
+    #     return f'new {self.class_name}({", ".join(map(str, self.args))})'
     def __str__(self) -> str:
-        return f'new {self.class_name}({", ".join(map(str, self.args))})'
+        return f'new {self.class_name}(...)'  # Простое представление
 
 
 class NewArrayInitNode(ExprNode):
@@ -447,8 +444,6 @@ class NewArrayInitNode(ExprNode):
 
     def __str__(self):
         return f'new {self.type_name}[{self.size}]{{...}}'
-
-
 
 
 class ArrayAccessNode(ExprNode):
