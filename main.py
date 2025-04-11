@@ -1,77 +1,63 @@
 import os
 import mel_parser
+from interpreter import Interpreter
+from semantics import SemanticAnalyzer
 
 
 def main():
+    prog = mel_parser.parse('''class A {
+        int x = 5;
+        float y = 3.14;
+        int[] arr = {1, 2, 3};
+        arr[1] = 42;
+        x = arr[2];
+        string s = "Hello";
+        int z;
+        z = 5;
+        z = 5 * 7;
+    }''')
+
     # prog = mel_parser.parse('''
-    # class MyClass {
-    #     int a;
-    #     void method() { }
-    #     MyClass constructor(int v) {
-    #         this.a = v;
+    # # int a = 5;
+    # # int b = 3;
+    # # int c = a + b * 2;
+    # # bool result = c > 10 || b < 2;
+    # # ''')
+
+    # prog = mel_parser.parse('''
+    #     class Point {
+    #         int x = 0;
+    #         int y = 0;
     #     }
-    #
-    #     void test() {
-    #         for (int i = 0; i < 10; i=i+1) {
-    #             if (i % 2 == 0) {
-    #                 a = i;
-    #             } else {
-    #                 a = i * 2;
-    #             }
-    #         }
-    #
-    #         while (a < 50) {
-    #             a = a + 5;
-    #         }
-    #
-    #         int[] arr = new int[10];
-    #         int[] arr2 = {1, 2, 3};
-    #
-    #
-    #     }
-    # }
+    #     var Point p;
+    #     p.x = 5;
     # ''')
 
-    #int[] arr = new int[10];  // NewArrayNode
-    #int[] arr2 = {1, 2, 3};   // ArrayNode
-
     # prog = mel_parser.parse('''
-    #     int[] arr = new int[10];
-    #     ''')
+    #     int sum(int a, int b) {
+    #         return a + b;
+    #     }
+    #     int r = sum(3, 4);
+    # ''')
 
-    prog = mel_parser.parse('''
-    class MyClass {
-        int a = 5;
-        void method() { }
-        MyClass constructor(int v) {
-            this.a = v;
-        }
+    analyzer = SemanticAnalyzer()
 
-        void test() {
-            for (int i = 0; i < 10; i=i+1) {
-                if (i % 2 == 0) {
-                    a = i;
-                } else {
-                    a = i * 2;
-                }
-            }
+    analyzer.analyze(prog)
 
-            while (a < 50) {
-                a = a + 5;
-            }
-            
-            int[] arr = new int[10];
-            arr = {1, 2, 3, 4, 5};
-            int[] arr2 = {1, 2, 3};
-            int[] arr3 = {1, 2, 3};
-            x = arr[10];
-            arr[0] = 1;
-            A g = new A(3);
-        }
-    }
-    ''')
+    if analyzer.errors:
+        print("Найдены ошибки семантики:")
+        for err in analyzer.errors:
+            print("-", err)
+    else:
+        print("Семантический анализ прошёл успешно")
 
     print(*prog.tree, sep=os.linesep)
+
+    interpreter = Interpreter()
+    result = interpreter.eval(prog)
+
+    print("Глобальные переменные после выполнения:")
+    print(interpreter.variables)
 
 
 if __name__ == "__main__":

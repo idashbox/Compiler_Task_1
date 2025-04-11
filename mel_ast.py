@@ -6,7 +6,7 @@ from enum import Enum
 
 class AstNode(ABC):
     @property
-    def childs(self) -> Tuple['AstNode', ...]:
+    def children(self) -> Tuple['AstNode', ...]:
         return ()
 
     @abstractmethod
@@ -14,39 +14,28 @@ class AstNode(ABC):
         pass
 
     @property
-    def tree(self) -> List[str]:  # Исправлен тип возвращаемого значения
+    def tree(self) -> Tuple[str, ...]:
         res = [str(self)]
-        childs = self.childs
+        children = self.children
+        for i, child in enumerate(children):
+            ch0, ch = '├', '│'
+            if i == len(children) - 1:
+                ch0, ch = '└', ' '
 
-        if childs:
-            if isinstance(childs, (list, tuple)):
-                num_children = len(childs)
-                for i, child in enumerate(childs):
-                    ch0, ch = '├', '│'
-                    if i == num_children - 1:
-                        ch0, ch = '└', ' '
-
-                    # Проверка на None
-                    if child is not None:
-                        # Если child является списком, обработаем каждый элемент в нем
-                        if isinstance(child, list):
-                            for j, subchild in enumerate(child):
-                                if subchild is not None:
-                                    res.extend(((ch0 if k == 0 else ch) + ' ' + s for k, s in enumerate(subchild.tree)))
-                        else:
-                            res.extend(((ch0 if j == 0 else ch) + ' ' + s for j, s in enumerate(child.tree)))
-            else:  # childs - это отдельный узел (например, GroupNode)
-                ch0, ch = '└', ' '  # Можно настроить префиксы для одного дочернего элемента
-                res.extend(((ch0 if j == 0 else ch) + ' ' + s for j, s in enumerate(childs.tree)))
-
-        return res
+            if isinstance(child, list):
+                for k, sub in enumerate(child):
+                    res.extend(((ch0 if k == 0 else ch) + ' ' + s for j, s in enumerate(sub.tree)))
+            else:
+                res.extend(((ch0 if j == 0 else ch) + ' ' + s for j, s in enumerate(child.tree)))
+        return tuple(res)
 
     def visit(self, func: Callable[['AstNode'], None]) -> None:
         func(self)
-        map(func, self.childs)
+        for child in self.children:
+            child.visit(func)
 
     def __getitem__(self, index):
-        return self.childs[index] if index < len(self.childs) else None
+        return self.children[index] if index < len(self.children) else None
 
 
 class ExprNode(AstNode):
@@ -93,9 +82,9 @@ class IdentNode(ExprNode):
 class BinOp(Enum):
     ADD = '+'
     SUB = '-'
-    MOD = '%'
     MUL = '*'
     DIV = '/'
+    MOD = '%'
     GT = '>'
     GE = '>='
     LT = '<'
@@ -120,7 +109,7 @@ class UnaryOpNode(ExprNode):
         self.arg = arg
 
     @property
-    def childs(self) -> Tuple[ExprNode]:
+    def children(self) -> Tuple[ExprNode]:
         return (self.arg,)
 
     def __str__(self) -> str:
@@ -135,7 +124,7 @@ class BoolOpNode(ExprNode):
         self.arg2 = arg2
 
     @property
-    def childs(self) -> Tuple[ExprNode, ExprNode]:
+    def children(self) -> Tuple[ExprNode, ExprNode]:
         return self.arg1, self.arg2
 
     def __str__(self) -> str:
@@ -153,71 +142,39 @@ class ArrayNode(ExprNode):
         self.elements = elements
 
     @property
-    def childs(self) -> Tuple[ExprNode, ...]:
+    def children(self) -> Tuple[ExprNode, ...]:
         return self.elements
 
     def __str__(self) -> str:
         return 'array'
 
 
-class ConstructorDeclNode(StmtNode):
-    def __init__(self, params: list, body: StmtNode):
-        super().__init__()
-        self.params = params
-        self.body = body
-
-    @property
-    def childs(self) -> Tuple[StmtNode]:
-        return (self.body,)
-
-    def __str__(self) -> str:
-        return 'constructor(...)'
-
-
 class ClassDeclNode(StmtNode):
-    def __init__(self, name: IdentNode, body: StmtNode, constructors: Optional[list] = None):
+    def __init__(self, name: IdentNode, body: StmtNode):
         super().__init__()
         self.name = name
         self.body = body
-        self.constructors = constructors if constructors else []
 
     @property
-    def childs(self) -> Tuple[StmtNode]:
-        return (self.body,) + tuple(self.constructors)
+    def children(self) -> Tuple[StmtNode]:
+        return (self.body,)
 
     def __str__(self) -> str:
         return f'class {self.name}'
 
 
-class ThisNode(ExprNode):
-    def __str__(self) -> str:
-        return "this"
-
-
 class MemberAccessNode(ExprNode):
     def __init__(self, obj: ExprNode, member: IdentNode):
         super().__init__()
-        if not isinstance(obj, ExprNode):
-            raise TypeError(f"obj must be an instance of ExprNode, got {type(obj)}")
-        if not isinstance(member, IdentNode):
-            raise TypeError(f"member must be an instance of IdentNode, got {type(member)}")
         self.obj = obj
         self.member = member
 
     @property
-    def childs(self) -> Tuple[ExprNode, IdentNode]:
+    def children(self) -> Tuple[ExprNode, IdentNode]:
         return self.obj, self.member
 
     def __str__(self) -> str:
         return f'{self.obj}.{self.member}'
-
-
-class GroupNode(AstNode):
-    def __init__(self, value):
-        self.value = value
-
-    def __str__(self):
-        return f"{self.value}"
 
 
 class BinOpNode(ExprNode):
@@ -228,7 +185,7 @@ class BinOpNode(ExprNode):
         self.arg2 = arg2
 
     @property
-    def childs(self) -> Tuple[ExprNode, ExprNode]:
+    def children(self) -> Tuple[ExprNode, ExprNode]:
         return self.arg1, self.arg2
 
     def __str__(self) -> str:
@@ -242,25 +199,39 @@ class FuncCallNode(ExprNode):
         self.params = params
 
     @property
-    def childs(self) -> Tuple[ExprNode]:
-        return self.params
+    def children(self) -> Tuple[ExprNode, ...]:
+        return (self.func,) + self.params
 
     def __str__(self) -> str:
         return f'{self.func}()'
 
 
 class AssignNode(StmtNode):
-    def __init__(self, var: ExprNode, val: ExprNode):  # var теперь ExprNode
+    def __init__(self, var: IdentNode, val: ExprNode):
         super().__init__()
-        self.var = var  # Может быть IdentNode, ArrayAccessNode, MemberAccessNode и т.д.
+        self.var = var
         self.val = val
 
     @property
-    def childs(self) -> Tuple[ExprNode, ExprNode]:
+    def children(self) -> Tuple[IdentNode, ExprNode]:
         return self.var, self.val
 
     def __str__(self) -> str:
         return '='
+
+
+class WhileNode(StmtNode):
+    def __init__(self, cond: ExprNode, body: StmtNode):
+        super().__init__()
+        self.cond = cond
+        self.body = body
+
+    @property
+    def children(self) -> Tuple[ExprNode, StmtNode]:
+        return self.cond, self.body
+
+    def __str__(self) -> str:
+        return 'while'
 
 
 class IfNode(StmtNode):
@@ -271,25 +242,11 @@ class IfNode(StmtNode):
         self.else_stmt = else_stmt
 
     @property
-    def childs(self) -> Tuple[ExprNode, StmtNode]:
-        return (self.cond, self.then_stmt) + ((self.else_stmt,) if self.else_stmt else tuple())
+    def children(self) -> Tuple[ExprNode, StmtNode]:
+        return (self.cond, self.then_stmt) + ((self.else_stmt, ) if self.else_stmt else tuple())
 
     def __str__(self) -> str:
         return 'if'
-
-
-class WhileNode(StmtNode):
-    def __init__(self, cond: ExprNode, body: StmtNode):
-        super().__init__()
-        self.cond = cond
-        self.body = body
-
-    @property
-    def childs(self) -> Tuple[ExprNode, StmtNode]:
-        return self.cond, self.body
-
-    def __str__(self) -> str:
-        return 'while'
 
 
 class ForNode(StmtNode):
@@ -301,7 +258,7 @@ class ForNode(StmtNode):
         self.body = body
 
     @property
-    def childs(self) -> Tuple[StmtNode, ExprNode, StmtNode, StmtNode]:
+    def children(self) -> Tuple[StmtNode, ExprNode, StmtNode, StmtNode]:
         return self.init, self.cond, self.step, self.body
 
     def __str__(self) -> str:
@@ -314,15 +271,80 @@ class StmtListNode(StmtNode):
         self.stmts = stmts
 
     @property
-    def childs(self) -> Tuple[AstNode]:
+    def children(self) -> Tuple[AstNode, ...]:
         return self.stmts
 
     def __str__(self) -> str:
         return '...'
 
 
-class TypeDeclNode:
+class ArrayInitNode(StmtNode):
+    def __init__(self, name: IdentNode, array: ArrayNode):
+        self.name = name
+        self.array = array
+
+    def __repr__(self):
+        return f"ArrayInitNode(name={self.name}, array={self.array})"
+
+    def __str__(self):
+        return f'init {self.name}'
+
+
+class ArrayAssignNode(StmtNode):
+    def __init__(self, ident, index, value):
+        self.ident = ident
+        self.index = index
+        self.value = value
+
+    @property
+    def children(self) -> Tuple[AstNode, ...]:
+        return (self.ident, self.value)
+
+    def __str__(self):
+        return '='
+
+
+class ArrayIndexNode(AstNode):
+    def __init__(self, array: AstNode, index: AstNode):
+        self.array = array
+        self.index = index
+
+    @property
+    def children(self) -> Tuple[AstNode, ...]:
+        return (self.array, self.index)
+
+    def __str__(self):
+        return '[]'
+
+
+class ArrayAccessNode(AstNode):
+    def __init__(self, array_expr, index_expr):
+        self.array_expr = array_expr
+        self.index_expr = index_expr
+
+    def _str(self, level=0):
+        indent = "│ " * level
+        s = f"{indent}├ []\n"
+        s += self.array_expr._str(level + 1)
+        s += self.index_expr._str(level + 1)
+        return s
+
+class ArrayElementAssignNode(AstNode):
+    def __init__(self, array: AstNode, index: AstNode, value: AstNode):
+        self.array = array
+        self.index = index
+        self.value = value
+
+    def children(self) -> Tuple[AstNode, ...]:
+        return (ArrayIndexNode(self.array, self.index), self.value)
+
+    def __str__(self):
+        return '='
+
+
+class TypeDeclNode(AstNode):
     def __init__(self, typename):
+        super().__init__()
         if isinstance(typename, ArrayTypeNode):
             self.typename = str(typename)
         else:
@@ -332,8 +354,7 @@ class TypeDeclNode:
         return f"TypeDeclNode({self.typename})"
 
     def __str__(self):
-        return self.typename
-
+        return str(self.typename)
 
 class ArrayTypeNode:
     def __init__(self, name):
@@ -344,33 +365,61 @@ class ArrayTypeNode:
 
 
 class VarsDeclNode(StmtNode):
-    def __init__(self, type: IdentNode, *vars: Union[IdentNode, AssignNode]):
+    def __init__(self, type_node: 'TypeDeclNode', *vars: IdentNode):
         super().__init__()
-        self.type = type
-        self.vars = vars
+        self.type = type_node
+        self.vars = list(vars)  # исправим на list
 
     @property
-    def childs(self) -> Tuple[AstNode]:
-        return self.vars
+    def children(self) -> Tuple[AstNode, ...]:
+        return (self.type,) + tuple(self.vars)
 
     def __str__(self) -> str:
         return f'var ({str(self.type)})'
 
 
-class FuncDeclNode(StmtNode):
-    def __init__(self, type: IdentNode, name: IdentNode, *params_and_body: VarsDeclNode):
-        super().__init__()
-        self.type = type
-        self.name = name
-        self.params = params_and_body[:-1]
-        self.body = params_and_body[-1]
+class ParamDeclListNode(AstNode):
+    def __init__(self, vars: list[VarsDeclNode]):
+        self._vars = vars
+
+    def __repr__(self):
+        return f"ParamDeclListNode({self._vars})"
 
     @property
-    def childs(self) -> Tuple[AstNode]:
-        return *self.params, self.body
+    def vars(self):
+        return self._vars
+
+    @property
+    def children(self) -> Tuple[AstNode, ...]:
+        return tuple(self._vars)
+
+    @property
+    def tree(self):
+        res = [f"ParamDeclList:"]
+        for param in self._vars:
+            for line in param.tree:
+                res.append("  " + line)
+        return res
+
+    def __str__(self):
+        return f"param_decl_list ({len(self._vars)} param(s))"
+
+
+class FuncDeclNode(StmtNode):
+    def __init__(self, return_type: 'TypeDeclNode', name: IdentNode, params: 'ParamDeclListNode', body: 'StmtListNode'):
+        super().__init__()
+        self.return_type = return_type
+        self.name = name
+        self.params = params
+        self.body = body
+
+    @property
+    def children(self) -> Tuple[AstNode, ...]:
+        return (self.return_type, self.name, self.params, self.body)
 
     def __str__(self) -> str:
-        return f'{self.type} {self.name} (...)'
+        return f'func {self.name}'
+
 
 
 class ReturnNode(StmtNode):
@@ -379,82 +428,8 @@ class ReturnNode(StmtNode):
         self.result = result
 
     @property
-    def childs(self) -> Tuple[AstNode]:
+    def children(self) -> Tuple[AstNode]:
         return self.result,
 
     def __str__(self) -> str:
         return 'return'
-
-
-class MethodDeclNode(StmtNode):
-    def __init__(self, return_type: IdentNode, name: IdentNode, params: list, body: StmtNode):
-        super().__init__()
-        self.return_type = return_type
-        self.name = name
-        self.params = params
-        self.body = body
-
-    @property
-    def childs(self) -> Tuple[StmtNode]:
-        return (self.body,)
-
-    def __str__(self) -> str:
-        return f'method {self.name} returns {self.return_type}'
-
-
-class NewArrayNode(ExprNode):
-    def __init__(self, type_name: IdentNode, size: ExprNode):
-        super().__init__()
-        self.type_name = type_name
-        self.size = size
-
-    @property
-    def childs(self) -> Tuple[ExprNode]:
-        return (self.size,)
-
-    def __str__(self) -> str:
-        return f'new {self.type_name}[{self.size}]'
-
-
-class NewObjectNode(ExprNode):
-    def __init__(self, class_name: IdentNode, args: Tuple[ExprNode, ...]):
-        super().__init__()
-        self.class_name = class_name
-        self.args = args
-
-    @property
-    def childs(self) -> Tuple[ExprNode, ...]:
-        return self.args
-
-    # def __str__(self) -> str:
-    #     return f'new {self.class_name}({", ".join(map(str, self.args))})'
-    def __str__(self) -> str:
-        return f'new {self.class_name}(...)'  # Простое представление
-
-
-class NewArrayInitNode(ExprNode):
-    def __init__(self, type_name, size, elements):
-        self.type_name = type_name
-        self.size = size
-        self.elements = elements
-
-    @property
-    def childs(self):
-        return (self.size,) + self.elements
-
-    def __str__(self):
-        return f'new {self.type_name}[{self.size}]{{...}}'
-
-
-class ArrayAccessNode(ExprNode):
-    def __init__(self, array: ExprNode, index: ExprNode):
-        super().__init__()
-        self.array = array
-        self.index = index
-
-    @property
-    def childs(self) -> Tuple[ExprNode, ExprNode]:
-        return self.array, self.index
-
-    def __str__(self) -> str:
-        return '[]'
