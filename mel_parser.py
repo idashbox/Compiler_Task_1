@@ -120,7 +120,6 @@ class MelASTBuilder(Transformer):
             # Печать для отладки:
             print(f"Обработка узла: {tree.data} с аргументами {children}")
             if tree.data == 'array_assign' and isinstance(children[0], ArrayAssignNode):
-                # Если первый аргумент уже является ArrayAssignNode, просто вернём его
                 return children[0]
             return f(*children)
 
@@ -143,21 +142,16 @@ class MelASTBuilder(Transformer):
                 return BinOpNode(op, arg1, arg2)
             return get_bin_op_node
 
-            # Обработка присваивания
         if item == 'assign':
             def get_assign_node(var, val):
-                # если левая часть — Token, превращаем в IdentNode
                 if isinstance(var, Token):
                     var = IdentNode(str(var))
-                # если правая — тоже Token (например, имя массива), это ошибка
                 if isinstance(val, Token):
                     val = IdentNode(str(val))
                 return AssignNode(var, val)
 
             return get_assign_node
 
-
-        # Обработка других типов узлов
         else:
             def get_node(*args):
                 cls_name = ''.join(x.capitalize() or '_' for x in item.split('_')) + 'Node'
@@ -224,6 +218,7 @@ class MelASTBuilder(Transformer):
 
     def prog(self, *stmts):
         return StmtListNode(list(stmts))
+
 
 def parse(prog: str)->StmtListNode:
     prog = parser.parse(str(prog))

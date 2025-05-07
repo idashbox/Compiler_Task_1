@@ -342,19 +342,41 @@ class ArrayElementAssignNode(AstNode):
         return '='
 
 
+class PrimitiveType:
+    def __init__(self, name):
+        self.name = name
+
+    def __repr__(self):
+        return self.name
+
+
+PRIMITIVE_TYPES = {"int", "float", "bool", "string"}
+
 class TypeDeclNode(AstNode):
     def __init__(self, typename):
         super().__init__()
-        if isinstance(typename, ArrayTypeNode):
+        if isinstance(typename, IdentNode):
+            name = typename.name
+            if name in PRIMITIVE_TYPES:
+                self.type = PrimitiveType(name)
+                self.typename = name
+            else:
+                self.type = typename
+                self.typename = name
+        elif isinstance(typename, ArrayTypeNode):
+            self.type = typename
             self.typename = str(typename)
         else:
-            self.typename = typename
+            self.type = typename
+            self.typename = str(typename)
 
     def __repr__(self):
         return f"TypeDeclNode({self.typename})"
 
     def __str__(self):
         return str(self.typename)
+
+
 
 class ArrayTypeNode:
     def __init__(self, name):
