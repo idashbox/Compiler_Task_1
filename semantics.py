@@ -1,106 +1,105 @@
-from mel_ast import IdentNode, AssignNode, LiteralNode, VarsDeclNode, FuncCallNode, FuncDeclNode
+from mel_ast import *
+from scope import Scope
+from mel_types import get_type_from_node, equals_simple, PrimitiveType, ArrayType, ClassType, Type, equals_simple_type
 
 
 class SemanticAnalyzer:
     def __init__(self):
         self.errors = []
-        self.symbols = {}
+        self.current_scope = Scope()
+        self.global_scope = self.current_scope
+        self.classes = {}
         self.functions = {}
 
-    def analyze(self, tree):
-        self.visit(tree)
+    def analyze(self, node):
+        self.visit(node)
 
     def visit(self, node):
-        method = getattr(self, f'visit_{type(node).__name__}', self.generic_visit)
-        return method(node)
-
-    def generic_visit(self, node):
         if isinstance(node, list):
-            for child in node:
-                self.visit(child)
-        elif hasattr(node, 'children'):
-            for child in node.children:
-                self.visit(child)
+            for item in node:
+                self.visit(item)
+            return
 
-    def visit_VarsDeclNode(self, node: VarsDeclNode):
-        var_type = node.type.typename
+        method_name = f'visit_{type(node).__name__}'
+        method = getattr(self, method_name, self.generic_visit)
+        method(node)
 
+    def visit_StmtListNode(self, node):
+        old_scope = self.current_scope
+        self.current_scope = Scope(parent=old_scope)
+        for stmt in node.stmts:
+            self.visit(stmt)
+        self.current_scope = old_scope
+
+    def visit_VarsDeclNode(self, node):
+        var_type = get_type_from_typename(node.type.typename)
         for var in node.vars:
             if isinstance(var, AssignNode):
                 var_name = var.var.name
-                value_type = self.visit(var.val)
+                value_type = get_type_from_node(var.val)
 
-                if not self.check_type_compatibility(var_type, value_type):
+                if not equals_simple_type(var_type, value_type):
                     self.errors.append(
-                        f"Несовместимые типы: нельзя присвоить {value_type} переменной типа {var_type}"
+                        f"Type mismatch: cannot assign {value_type} to {var_type}"
                     )
-                self.symbols[var_name] = var_type
 
-            elif isinstance(var, IdentNode):
-                var_name = var.name
-                self.symbols[var_name] = var_type
+                try:
+                    self.current_scope.declare(var_name, var_type)
+                except Exception as e:
+                    self.errors.append(str(e))
 
-    def visit_AssignNode(self, node: AssignNode):
+    def visit_AssignNode(self, node):
         var_name = node.var.name
+        value_type = get_type_from_node(node.val)
 
-        if var_name not in self.symbols:
-            self.errors.append(f"Переменная {var_name} не объявлена.")
-            return None
+        # Ищем переменную в цепочке областей видимости
+        var_type = None
+        current_scope = self.current_scope
+        while current_scope:
+            var_type = current_scope.lookup(var_name)
+            if var_type: break
+            current_scope = current_scope.parent
 
-        expected_type = self.symbols[var_name]
-        value_type = self.visit(node.val)
+        if not var_type:
+            self.errors.append(f"Undefined variable '{var_name}'")
+            return
 
-        if not self.check_type_compatibility(expected_type, value_type):
+        if not equals_simple_type(var_type, value_type):
             self.errors.append(
-                f"Ошибка типа: нельзя присвоить {value_type} переменной типа {expected_type}"
+                f"Type mismatch: cannot assign {value_type} to {var_type}"
             )
 
-    def visit_FuncDeclNode(self, node: FuncDeclNode):
-        func_name = node.name.name
-        if func_name in self.functions:
-            self.errors.append(f"Функция {func_name} уже определена")
-        else:
-            self.functions[func_name] = node
+    def visit_IfNode(self, node):
+        self.visit(node.cond)
+        self.check_boolean_condition(node.cond)
 
-        self.visit(node.params)
-        self.visit(node.body)
+        old_scope = self.current_scope
+        self.current_scope = Scope(parent=old_scope)
+        self.visit(node.then_stmt)
+        self.current_scope = old_scope
 
-    def visit_FuncCallNode(self, node):
-        func = self.lookup_function(node.func)
-        if func is None:
-            self.errors.append(f"Функция {node.func.name} не определена")
-            return None
+        if node.else_stmt:
+            self.current_scope = Scope(parent=old_scope)
+            self.visit(node.else_stmt)
+            self.current_scope = old_scope
 
-        if len(node.params) != len(func.params):
-            self.errors.append(
-                f"Неверное количество аргументов при вызове функции {node.func.name}. "
-                f"Ожидалось {len(func.params)}, получено {len(node.params)}"
-            )
-            return func.return_type.typename if hasattr(func, 'return_type') else "unknown"
+    def check_boolean_condition(self, cond_node):
+        cond_type = get_type_from_node(cond_node)
+        if not isinstance(cond_type, PrimitiveType) or cond_type.name != "bool":
+            self.errors.append(f"Condition must be boolean, got {cond_type}")
 
-        return func.return_type.typename if hasattr(func, 'return_type') else "unknown"
+    def generic_visit(self, node):
+        if hasattr(node, 'children'):
+            for child in node.children:
+                if child is not None:
+                    self.visit(child)
 
-    def visit_LiteralNode(self, node: LiteralNode):
-        if isinstance(node.value, int):
-            return "int"
-        elif isinstance(node.value, float):
-            return "float"
-        elif isinstance(node.value, str):
-            return "string"
-        elif isinstance(node.value, bool):
-            return "bool"
-        return "unknown"
 
-    def visit_IdentNode(self, node: IdentNode):
-        return self.symbols.get(node.name, "unknown")
-
-    def lookup_function(self, name_node):
-        name = name_node.name if isinstance(name_node, IdentNode) else name_node
-        return self.functions.get(name, None)
-
-    def check_type_compatibility(self, declared_type, value_type):
-        if declared_type == value_type:
-            return True
-        if declared_type == "float" and value_type == "int":
-            return True
-        return False
+def get_type_from_typename(typename: str) -> Type:
+    if typename == "int": return PrimitiveType("int")
+    if typename == "float": return PrimitiveType("float")
+    if typename == "string": return PrimitiveType("string")
+    if typename == "bool": return PrimitiveType("bool")
+    if typename.endswith("[]"):
+        return ArrayType(get_type_from_typename(typename[:-2]))
+    return ClassType(typename)

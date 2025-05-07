@@ -1,25 +1,87 @@
 import os
 import mel_parser
-from mel_parser import parse
 from interpreter import Interpreter
+from scope import Scope
 from semantics import SemanticAnalyzer
-from mel_types import equals_simple
+
+
+def test_scope_and_types():
+    test_cases = [
+        (
+            '''
+            int x = 5;
+            bool true;
+            if (true){
+                int x = "hello";
+            }
+            ''',
+            "Ошибка: присвоение string в переменную типа int внутри блока"
+        ),
+        (
+            '''
+            if (true){
+                int x = 5;
+            }
+            x = 10;
+            ''',
+            "Ошибка: переменная x не объявлена в глобальной области видимости"
+        ),
+        (
+            '''
+            int x = 10;
+            if (true){
+                x = 20;
+            }
+            ''',
+            "Нет ошибок — корректное использование переменной из внешнего scope"
+        ),
+        (
+            '''
+            int sum(int a, int b) {
+                return a + b;
+            }
+            int result = sum(3, "4");
+            ''',
+            "Ошибка: передан аргумент string вместо int"
+        ),
+        (
+            '''
+            class A {
+                int x;
+            }
+            A a;
+            a.x = "hello";
+            ''',
+            "Ошибка: присвоение string в поле типа int внутри класса"
+        ),
+        (
+            '''
+            int[] arr = {1, 2, 3};
+            arr[0] = "hello";
+            ''',
+            "Ошибка: присвоение string в элемент массива типа int"
+        )
+    ]
+    print("\n=== Тест: Проверка Scope и Типов ===")
+
+    for i, (code, desc) in enumerate(test_cases, 1):
+        print(f"\nТест {i}: {desc}")
+        try:
+            prog = mel_parser.parse(code)
+            analyzer = SemanticAnalyzer()
+            analyzer.analyze(prog)
+            if analyzer.errors:
+                print("Найдены ошибки:")
+                for err in analyzer.errors:
+                    print("-", err)
+            else:
+                print("Ошибок не найдено")
+        except Exception as e:
+            print(f"Ошибка при анализе: {e}")
 
 
 def main():
-    test_nodes = [
-        ('int x = 5;', 'int y = 10;', True),  # оба int
-        ('int a = 5;', 'float b = 3.14;', False),  # int vs float
-        ('int[] arr1 = {1, 2};', 'int[] arr2 = {3, 4};', True),  # оба массивы
-        ('string s = "hello";', 'bool flag = true;', False)  # string vs bool
-    ]
-
-    print("\nПроверка равенства типов:")
-    for code1, code2, expected in test_nodes:
-        node1 = parse(code1).children[0]
-        node2 = parse(code2).children[0]
-        result = equals_simple(node1, node2)
-        print(f"{code1} == {code2}: {result} (ожидается {expected})")
+    test_scope_and_types()
 
     prog1 = mel_parser.parse('''
     class A {

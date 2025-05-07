@@ -21,6 +21,12 @@ parser = Lark('''
     array_type: CNAME "[" "]"    -> array_type
     type_decl: CNAME | array_type
     type: CNAME | CNAME "[" "]"  -> array_type
+    
+    ?declaration: "int" CNAME "=" expr ";"
+             | "float" CNAME "=" expr ";"
+             | "string" CNAME "=" expr ";"
+
+    ?assignment: CNAME "=" expr ";"
 
     ?group: literal
         | CNAME
@@ -215,6 +221,14 @@ class MelASTBuilder(Transformer):
     def CNAME(self, token: Token):
         print(f"Преобразование CNAME: {token} -> IdentNode")
         return IdentNode(str(token))
+
+    def var_declaration(self, args):
+        var_type, name, value = args
+        return VarDeclarationNode(var_type, name, value)
+
+    def assignment(self, args):
+        name, value = args
+        return AssignmentNode(name, value)
 
     def prog(self, *stmts):
         return StmtListNode(list(stmts))

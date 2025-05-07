@@ -34,6 +34,9 @@ class AstNode(ABC):
         for child in self.children:
             child.visit(func)
 
+    def get_type(self):
+        return None
+
     def __getitem__(self, index):
         return self.children[index] if index < len(self.children) else None
 
@@ -50,6 +53,17 @@ class LiteralNode(ExprNode):
     def __init__(self, value: Any):
         super().__init__()
         self.value = value
+        if isinstance(value, int):
+            self.type = PrimitiveType("int")
+        elif isinstance(value, float):
+            self.type = PrimitiveType("float")
+        elif isinstance(value, bool):
+            self.type = PrimitiveType("bool")
+        elif isinstance(value, str):
+            self.type = PrimitiveType("string")
+        else:
+            self.type = None
+
         if isinstance(value, str) and value.startswith('"'):
             self.value = value[1:-1]
             return
@@ -68,6 +82,9 @@ class LiteralNode(ExprNode):
         if isinstance(self.value, str):
             return f'"{self.value}"'
         return str(self.value)
+
+    def get_type(self):
+        return self.type
 
 
 class IdentNode(ExprNode):
@@ -363,8 +380,8 @@ class TypeDeclNode(AstNode):
             else:
                 self.type = typename
                 self.typename = name
-        elif isinstance(typename, ArrayTypeNode):
-            self.type = typename
+        elif isinstance(typename.name, ArrayTypeNode):
+            self.type = ArrayTypeNode(typename.name)
             self.typename = str(typename)
         else:
             self.type = typename
@@ -376,7 +393,26 @@ class TypeDeclNode(AstNode):
     def __str__(self):
         return str(self.typename)
 
+class TypedDeclNode(StmtNode):
+    def __init__(self, type_decl, assign_node):
+        self.type_decl = type_decl  # TypeDeclNode
+        self.assign_node = assign_node  # AssignNode
 
+    def __repr__(self):
+        var_name = self.assign_node.ident.name if isinstance(self.assign_node, AssignNode) else "?"
+        return f"TypedDeclNode({self.type_decl} {var_name})"
+
+class VarDeclarationNode(AstNode):
+    def __init__(self, var_type, name, value=None):
+        self.var_type = var_type
+        self.name = name
+        self.value = value
+
+
+class AssignmentNode(AstNode):
+    def __init__(self, var_name, value):
+        self.var_name = var_name
+        self.value = value
 
 class ArrayTypeNode:
     def __init__(self, name):

@@ -53,17 +53,22 @@ STRING = PrimitiveType("string")
 BOOL = PrimitiveType("bool")
 
 
-def get_type_from_node(node: AstNode) -> Type:
-    """Определяет тип из узла AST."""
+def get_type_from_node(node):
     if isinstance(node, LiteralNode):
-        if isinstance(node.value, int):
-            return INT
-        elif isinstance(node.value, float):
-            return FLOAT
-        elif isinstance(node.value, str):
-            return STRING
-        elif isinstance(node.value, bool):
-            return BOOL
+        value = node.value
+
+        # Определяем тип по значению
+        if isinstance(value, bool):
+            return PrimitiveType("bool")
+        elif isinstance(value, int):
+            return PrimitiveType("int")
+        elif isinstance(value, float):
+            return PrimitiveType("float")
+        elif isinstance(value, str):
+            if value.startswith('"') and value.endswith('"'):
+                return PrimitiveType("string")
+            elif value in ["true", "false"]:
+                return PrimitiveType("bool")
 
     elif isinstance(node, IdentNode):
         # В реальной реализации нужно смотреть в таблицу символов
@@ -96,7 +101,7 @@ def get_type_from_node(node: AstNode) -> Type:
         return ArrayType(get_type_from_typename(node.name))
 
     # Добавьте обработку других типов узлов по аналогии
-    return INT  # Тип по умолчанию (должен использоваться только в крайнем случае)
+    return None
 
 def get_type_from_typename(typename: str) -> Type:
     """Преобразует имя типа в объект Type."""
