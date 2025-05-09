@@ -11,6 +11,8 @@ class SemanticAnalyzer:
         self.classes = {}
         self.functions = {}
 
+        self.reported_errors = set()
+
     def analyze(self, node):
         self.visit(node)
 
@@ -32,21 +34,8 @@ class SemanticAnalyzer:
         self.current_scope = old_scope
 
     def visit_VarsDeclNode(self, node):
-        var_type = get_type_from_typename(node.type.typename)
         for var in node.vars:
-            if isinstance(var, AssignNode):
-                var_name = var.var.name
-                value_type = get_type_from_node(var.val)
-
-                if not equals_simple_type(var_type, value_type):
-                    self.errors.append(
-                        f"Type mismatch: cannot assign {value_type} to {var_type}"
-                    )
-
-                try:
-                    self.current_scope.declare(var_name, var_type)
-                except Exception as e:
-                    self.errors.append(str(e))
+            self.visit(var)
 
     def visit_AssignNode(self, node):
         var_name = node.var.name
@@ -61,7 +50,9 @@ class SemanticAnalyzer:
             current_scope = current_scope.parent
 
         if not var_type:
-            self.errors.append(f"Undefined variable '{var_name}'")
+            if ("Undefined variable", var_name) not in self.reported_errors:
+                self.errors.append(f"Undefined variable '{var_name}'")
+                self.reported_errors.add(("Undefined variable", var_name))
             return
 
         if not equals_simple_type(var_type, value_type):
@@ -93,6 +84,24 @@ class SemanticAnalyzer:
             for child in node.children:
                 if child is not None:
                     self.visit(child)
+
+    def visit_TypedDeclNode(self, node):
+        var_type = get_type_from_node(node.var_type)
+
+        # Если это объявление с присваиванием
+        if isinstance(node.var_node, AssignNode):
+            var_name = node.var_node.target.name
+            self.visit(node.var_node.value)
+            value_type = get_type_from_node(node.var_node.value)
+
+            if not equals_simple_type(var_type, value_type):
+                self.errors.append(f"Присвоение {value_type} в переменную типа {var_type}")
+
+            self.current_scope.define(var_name, var_type)
+        else:
+            # Просто объявление без инициализации
+            var_name = node.var_node.name
+            self.current_scope.define(var_name, var_type)
 
 
 def get_type_from_typename(typename: str) -> Type:
