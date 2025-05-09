@@ -1,10 +1,9 @@
 from mel_ast import AstNode, LiteralNode, VarsDeclNode, TypeDeclNode, ArrayTypeNode, IdentNode, ArrayNode, AssignNode
 
-
 class Type:
     """Базовый класс всех типов."""
     def __eq__(self, other):
-        return equals_simple(self, other)
+        return self.__class__ == other.__class__ and str(self) == str(other)
 
     def __str__(self):
         return self.__class__.__name__
@@ -56,26 +55,18 @@ BOOL = PrimitiveType("bool")
 def get_type_from_node(node):
     if isinstance(node, LiteralNode):
         value = node.value
-
-        # Определяем тип по значению
         if isinstance(value, bool):
-            return PrimitiveType("bool")
+            return BOOL
         elif isinstance(value, int):
-            return PrimitiveType("int")
+            return INT
         elif isinstance(value, float):
-            return PrimitiveType("float")
+            return FLOAT
         elif isinstance(value, str):
-            if value.startswith('"') and value.endswith('"'):
-                return PrimitiveType("string")
-            elif value in ["true", "false"]:
-                return PrimitiveType("bool")
+            return STRING
 
     elif isinstance(node, IdentNode):
-        # В реальной реализации нужно смотреть в таблицу символов
-        # Пока будем считать, что имя переменной совпадает с типом (для тестов)
-        if node.name in ['int', 'float', 'string', 'bool']:
-            return get_type_from_typename(node.name)
-        return INT  # По умолчанию
+        # Для идентификаторов тип будет определен из таблицы символов
+        return None
 
     elif isinstance(node, ArrayNode):
         if node.elements:
@@ -84,10 +75,7 @@ def get_type_from_node(node):
         return ArrayType(INT)  # Для пустых массивов
 
     elif isinstance(node, VarsDeclNode):
-        if isinstance(node.type, TypeDeclNode):
-            if isinstance(node.type.typename, ArrayTypeNode):
-                return ArrayType(get_type_from_typename(node.type.typename.name))
-            return get_type_from_typename(node.type.typename)
+        return get_type_from_node(node.type)
 
     elif isinstance(node, AssignNode):
         return get_type_from_node(node.var)
@@ -100,46 +88,33 @@ def get_type_from_node(node):
     elif isinstance(node, ArrayTypeNode):
         return ArrayType(get_type_from_typename(node.name))
 
-    # Добавьте обработку других типов узлов по аналогии
     return None
 
-def get_type_from_typename(typename: str) -> Type:
-    """Преобразует имя типа в объект Type."""
-    if typename == "int":
-        return INT
-    elif typename == "float":
-        return FLOAT
-    elif typename == "string":
-        return STRING
-    elif typename == "bool":
-        return BOOL
-    else:
-        # Предполагаем, что это имя класса
-        return ClassType(typename)
+
+def get_type_from_typename(typename):
+    if isinstance(typename, str):
+        if typename == "int":
+            return INT
+        elif typename == "float":
+            return FLOAT
+        elif typename == "string":
+            return STRING
+        elif typename == "bool":
+            return BOOL
+        elif typename.endswith("[]"):
+            return ArrayType(get_type_from_typename(typename[:-2]))
+        else:
+            return ClassType(typename)
+    return None
 
 
 def equals_simple(node1: AstNode, node2: AstNode) -> bool:
     type1 = get_type_from_node(node1)
     type2 = get_type_from_node(node2)
-    print(type1, type2)  # Добавьте эту строку для отладки
-
-    # Примитивные типы
-    if isinstance(type1, PrimitiveType) and isinstance(type2, PrimitiveType):
-        print(type1.name, type2.name)
-        return type1.name == type2.name
-
-    # Массивы
-    if isinstance(type1, ArrayType) and isinstance(type2, ArrayType):
-        print(type1.base_type, type2.base_type)
-        return equals_simple_type(type1.base_type, type2.base_type)
-
-    # Классы
-    if isinstance(type1, ClassType) and isinstance(type2, ClassType):
-        return type1.name == type2.name
-
-    return False
+    return equals_simple_type(type1, type2)
 
 
 def equals_simple_type(type1: Type, type2: Type) -> bool:
-    """Сравнивает непосредственно объекты типов."""
+    if type1 is None or type2 is None:
+        return False
     return type1 == type2
