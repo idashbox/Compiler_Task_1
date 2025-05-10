@@ -1,6 +1,5 @@
 from mel_ast import *
 from scope import Scope
-from mel_types import get_type_from_node, equals_simple_type, PrimitiveType, ArrayType, ClassType, Type
 
 
 class SemanticAnalyzer:
