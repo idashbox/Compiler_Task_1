@@ -114,6 +114,7 @@ parser = Lark('''
 
 ''', start="start")
 
+
 class MelASTBuilder(Transformer):
     def _call_userfunc(self, tree, new_children=None):
         # Assumes tree is already transformed
@@ -146,6 +147,7 @@ class MelASTBuilder(Transformer):
             def get_bin_op_node(arg1, arg2):
                 op = BinOp[item.upper()]
                 return BinOpNode(op, arg1, arg2)
+
             return get_bin_op_node
 
         if item == 'assign':
@@ -170,6 +172,7 @@ class MelASTBuilder(Transformer):
                     return cls(*args)
                 else:
                     raise NameError(f"Класс {cls_name} не определён")
+
             return get_node
 
     def array_assign(self, array_name, index_expr, value_expr):
@@ -234,7 +237,7 @@ class MelASTBuilder(Transformer):
         return StmtListNode(list(stmts))
 
 
-def parse(prog: str)->StmtListNode:
+def parse(prog: str) -> StmtListNode:
     prog = parser.parse(str(prog))
     prog = MelASTBuilder().transform(prog)
     return prog

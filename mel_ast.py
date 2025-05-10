@@ -34,8 +34,8 @@ class AstNode(ABC):
         for child in self.children:
             child.visit(func)
 
-    def get_type(self):
-        return None
+    def get_type(self):  # в LiteralNode
+        return self.type
 
     def __getitem__(self, index):
         return self.children[index] if index < len(self.children) else None

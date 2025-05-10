@@ -1,8 +1,10 @@
-from mel_ast import AstNode, LiteralNode, VarsDeclNode, TypeDeclNode, ArrayTypeNode, IdentNode, ArrayNode, AssignNode
+from mel_ast import AstNode, LiteralNode, VarsDeclNode, TypeDeclNode, ArrayTypeNode, IdentNode, ArrayNode, AssignNode, \
+    MemberAccessNode, FuncCallNode
 
 
 class Type:
     """Базовый класс всех типов."""
+
     def __eq__(self, other):
         return equals_simple(self, other)
 
@@ -23,6 +25,9 @@ class PrimitiveType(Type):
     def __repr__(self):
         return self.name
 
+    def __str__(self):
+        return self.name
+
 
 class ArrayType(Type):
     def __init__(self, base_type: Type):
@@ -32,6 +37,9 @@ class ArrayType(Type):
         return isinstance(other, ArrayType) and self.base_type == other.base_type
 
     def __repr__(self):
+        return f"{self.base_type}[]"
+
+    def __str__(self):
         return f"{self.base_type}[]"
 
 
@@ -45,6 +53,9 @@ class ClassType(Type):
     def __repr__(self):
         return f"class {self.name}"
 
+    def __str__(self):
+        return f"{self.name}"
+
 
 # Примитивные типы
 INT = PrimitiveType("int")
@@ -55,53 +66,43 @@ BOOL = PrimitiveType("bool")
 
 def get_type_from_node(node):
     if isinstance(node, LiteralNode):
-        value = node.value
-
-        # Определяем тип по значению
-        if isinstance(value, bool):
-            return PrimitiveType("bool")
-        elif isinstance(value, int):
-            return PrimitiveType("int")
-        elif isinstance(value, float):
-            return PrimitiveType("float")
-        elif isinstance(value, str):
-            if value.startswith('"') and value.endswith('"'):
-                return PrimitiveType("string")
-            elif value in ["true", "false"]:
-                return PrimitiveType("bool")
+        return node.get_type()
 
     elif isinstance(node, IdentNode):
-        # В реальной реализации нужно смотреть в таблицу символов
-        # Пока будем считать, что имя переменной совпадает с типом (для тестов)
-        if node.name in ['int', 'float', 'string', 'bool']:
-            return get_type_from_typename(node.name)
-        return INT  # По умолчанию
+        # Идентификатор — определим его тип из текущей области видимости семантического анализатора
+        # Здесь временно вернём None и пусть вызывающий обработает lookup
+        return None  # пусть SemAnalyzer сам lookup'ает
 
     elif isinstance(node, ArrayNode):
         if node.elements:
             element_type = get_type_from_node(node.elements[0])
             return ArrayType(element_type)
-        return ArrayType(INT)  # Для пустых массивов
-
-    elif isinstance(node, VarsDeclNode):
-        if isinstance(node.type, TypeDeclNode):
-            if isinstance(node.type.typename, ArrayTypeNode):
-                return ArrayType(get_type_from_typename(node.type.typename.name))
-            return get_type_from_typename(node.type.typename)
+        else:
+            return ArrayType(PrimitiveType("int"))  # пустой массив по умолчанию
 
     elif isinstance(node, AssignNode):
-        return get_type_from_node(node.var)
+        return get_type_from_node(node.val)
+
+    elif isinstance(node, FuncCallNode):
+        # Функция возвращает тип, нужно будет получать return_type из объявления
+        # Оставим пока как None, можно доработать позже
+        return None
+
+    elif isinstance(node, VarsDeclNode):
+        return get_type_from_typename(node.type.typename)
 
     elif isinstance(node, TypeDeclNode):
-        if isinstance(node.typename, ArrayTypeNode):
-            return ArrayType(get_type_from_typename(node.typename.name))
         return get_type_from_typename(node.typename)
 
     elif isinstance(node, ArrayTypeNode):
         return ArrayType(get_type_from_typename(node.name))
 
-    # Добавьте обработку других типов узлов по аналогии
+    elif isinstance(node, MemberAccessNode):
+        # Нужно будет смотреть в класс по имени объекта
+        return None  # пока не определить
+
     return None
+
 
 def get_type_from_typename(typename: str) -> Type:
     """Преобразует имя типа в объект Type."""
