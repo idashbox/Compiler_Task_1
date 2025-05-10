@@ -579,28 +579,30 @@ class ClassType(Type):
 
 
 
-def get_type_from_node(node):
+def get_type_from_node(node, scope=None, functions=None, classes=None):
     if isinstance(node, LiteralNode):
         return node.get_type()
 
     elif isinstance(node, IdentNode):
-        # Идентификатор — определим его тип из текущей области видимости семантического анализатора
-        # Здесь временно вернём None и пусть вызывающий обработает lookup
-        return None  # пусть SemAnalyzer сам lookup'ает
+        if scope:
+            return scope.lookup(node.name)
+        return None
 
     elif isinstance(node, ArrayNode):
         if node.elements:
-            element_type = get_type_from_node(node.elements[0])
+            element_type = get_type_from_node(node.elements[0], scope, functions, classes)
             return ArrayType(element_type)
         else:
-            return ArrayType(PrimitiveType("int"))  # пустой массив по умолчанию
+            return ArrayType(PrimitiveType("int"))  # по умолчанию
 
     elif isinstance(node, AssignNode):
-        return get_type_from_node(node.val)
+        return get_type_from_node(node.val, scope, functions, classes)
 
     elif isinstance(node, FuncCallNode):
-        # Функция возвращает тип, нужно будет получать return_type из объявления
-        # Оставим пока как None, можно доработать позже
+        if functions:
+            func_decl = functions.get(node.func.name)
+            if func_decl and func_decl.return_type:  # Предположим, у тебя есть return_type
+                return get_type_from_typename(func_decl.return_type.typename)
         return None
 
     elif isinstance(node, VarsDeclNode):
@@ -613,10 +615,21 @@ def get_type_from_node(node):
         return ArrayType(get_type_from_typename(node.name))
 
     elif isinstance(node, MemberAccessNode):
-        # Нужно будет смотреть в класс по имени объекта
-        return None  # пока не определить
+        if scope and classes:
+            obj_type = scope.lookup(node.obj.name)
+            if isinstance(obj_type, ClassType):
+                class_def = classes.get(obj_type.name)
+                if class_def:
+                    for stmt in class_def.body.stmts:
+                        if isinstance(stmt, VarsDeclNode):
+                            field_type = get_type_from_typename(stmt.type.typename)
+                            for var in stmt.vars:
+                                if isinstance(var, IdentNode) and var.name == node.member.name:
+                                    return field_type
+        return None
 
     return None
+
 
 
 def get_type_from_typename(typename: str) -> Type:

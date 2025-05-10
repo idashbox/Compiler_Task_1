@@ -48,7 +48,7 @@ class SemanticAnalyzer:
                 self.visit(var.val)
                 if isinstance(var.var, IdentNode):
                     var_name = var.var.name
-                    value_type = get_type_from_node(var.val)
+                    value_type = get_type_from_node(var.val, self.current_scope, self.functions, self.classes)
                     if value_type is None and isinstance(var.val, IdentNode):
                         value_type = self.current_scope.lookup(var.val.name)
                     if value_type is None:
@@ -84,7 +84,7 @@ class SemanticAnalyzer:
                         field_type = get_type_from_typename(stmt.type.typename)
                         for var in stmt.vars:
                             if isinstance(var, IdentNode) and var.name == field_name:
-                                value_type = get_type_from_node(node.val)
+                                value_type = get_type_from_node(node.val, self.current_scope, self.functions, self.classes)
                                 if value_type is None and isinstance(node.val, IdentNode):
                                     value_type = self.current_scope.lookup(node.val.name)
                                 if value_type is None:
@@ -96,7 +96,7 @@ class SemanticAnalyzer:
 
         if isinstance(node.var, IdentNode):
             var_name = node.var.name
-            value_type = get_type_from_node(node.val)
+            value_type = get_type_from_node(node.val, self.current_scope, self.functions, self.classes)
             if value_type is None and isinstance(node.val, IdentNode):
                 value_type = self.current_scope.lookup(node.val.name)
             if value_type is None:
@@ -112,7 +112,7 @@ class SemanticAnalyzer:
         array_type = self.current_scope.lookup(node.ident.name)
         if array_type is None or not isinstance(array_type, ArrayType):
             return  # тип будет проверен в другом месте при объявлении
-        value_type = get_type_from_node(node.value)
+        value_type = get_type_from_node(node.value, self.current_scope, self.functions, self.classes)
         if value_type is None and isinstance(node.value, IdentNode):
             value_type = self.current_scope.lookup(node.value.name)
         if value_type is None:
@@ -135,7 +135,7 @@ class SemanticAnalyzer:
             self.current_scope = parent
 
     def check_boolean_condition(self, cond_node):
-        cond_type = get_type_from_node(cond_node)
+        cond_type = get_type_from_node(cond_node, self.current_scope, self.functions, self.classes)
         if not isinstance(cond_type, PrimitiveType) or cond_type.name != "bool":
             self.add_error(f"Condition must be boolean, got {cond_type}")
 
@@ -160,7 +160,7 @@ class SemanticAnalyzer:
             return
 
         for expected, actual in zip(expected_types, node.params):
-            actual_type = get_type_from_node(actual)
+            actual_type = get_type_from_node(actual, self.current_scope, self.functions, self.classes)
             if actual_type is None and isinstance(actual, IdentNode):
                 actual_type = self.current_scope.lookup(actual.name)
             if actual_type is None:

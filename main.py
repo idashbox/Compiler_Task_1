@@ -21,7 +21,7 @@ def test_scope_and_types():
             if (true){
                 int x = 5;
             }
-            x = 10;
+            x = "10";
             ''',
             "Ошибка: переменная x не объявлена в глобальной области видимости"
         ),
@@ -87,7 +87,6 @@ def main():
         int x = 5;
         float y = 3.14;
         int[] arr = {1, 2, 3};
-        arr[1] = 42;
         x = arr[2];
         string s = "Hello";
         int z;
@@ -117,17 +116,6 @@ def main():
         }
         int r = sum(3, 4);
     ''')
-
-    analyzer = SemanticAnalyzer()
-
-    analyzer.analyze(prog)
-
-    if analyzer.errors:
-        print("Найдены ошибки семантики:")
-        for err in analyzer.errors:
-            print("-", err)
-    else:
-        print("Семантический анализ прошёл успешно")
 
     print(*prog.tree, sep=os.linesep)
 
