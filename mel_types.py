@@ -20,6 +20,9 @@ class PrimitiveType(Type):
     def __eq__(self, other):
         return isinstance(other, PrimitiveType) and self.name == other.name
 
+    def __str__(self):
+        return self.name  # Вместо PrimitiveType возвращаем int, bool и т.д.
+
     def __repr__(self):
         return self.name
 
@@ -56,8 +59,6 @@ BOOL = PrimitiveType("bool")
 def get_type_from_node(node):
     if isinstance(node, LiteralNode):
         value = node.value
-
-        # Определяем тип по значению
         if isinstance(value, bool):
             return PrimitiveType("bool")
         elif isinstance(value, int):
@@ -65,42 +66,30 @@ def get_type_from_node(node):
         elif isinstance(value, float):
             return PrimitiveType("float")
         elif isinstance(value, str):
-            if value.startswith('"') and value.endswith('"'):
-                return PrimitiveType("string")
-            elif value in ["true", "false"]:
-                return PrimitiveType("bool")
-
+            # Для строк в LiteralNode кавычки уже убраны, просто возвращаем string
+            return PrimitiveType("string")
     elif isinstance(node, IdentNode):
-        # В реальной реализации нужно смотреть в таблицу символов
-        # Пока будем считать, что имя переменной совпадает с типом (для тестов)
         if node.name in ['int', 'float', 'string', 'bool']:
             return get_type_from_typename(node.name)
-        return INT  # По умолчанию
-
+        return PrimitiveType("int")  # По умолчанию
     elif isinstance(node, ArrayNode):
         if node.elements:
             element_type = get_type_from_node(node.elements[0])
             return ArrayType(element_type)
-        return ArrayType(INT)  # Для пустых массивов
-
+        return ArrayType(PrimitiveType("int"))
     elif isinstance(node, VarsDeclNode):
         if isinstance(node.type, TypeDeclNode):
             if isinstance(node.type.typename, ArrayTypeNode):
                 return ArrayType(get_type_from_typename(node.type.typename.name))
             return get_type_from_typename(node.type.typename)
-
     elif isinstance(node, AssignNode):
         return get_type_from_node(node.var)
-
     elif isinstance(node, TypeDeclNode):
         if isinstance(node.typename, ArrayTypeNode):
             return ArrayType(get_type_from_typename(node.typename.name))
         return get_type_from_typename(node.typename)
-
     elif isinstance(node, ArrayTypeNode):
         return ArrayType(get_type_from_typename(node.name))
-
-    # Добавьте обработку других типов узлов по аналогии
     return None
 
 def get_type_from_typename(typename: str) -> Type:
