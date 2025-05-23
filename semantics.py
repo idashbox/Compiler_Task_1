@@ -55,10 +55,13 @@ class SemanticAnalyzer:
             return func_info['return_type'] if func_info else PrimitiveType("int")
         elif isinstance(node, MemberAccessNode):
             obj_type = self.get_type_from_node(node.obj)
+            print(f"DEBUG: MemberAccessNode: obj={node.obj}, obj_type={obj_type}, member={node.member.name}")
             if isinstance(obj_type, ClassType):
                 class_info = self.classes.get(obj_type.name)
+                print(f"DEBUG: class_info for {obj_type.name} = {class_info}")
                 if class_info:
                     field_type = class_info['fields'].get(node.member.name)
+                    print(f"DEBUG: field_type for {node.member.name} = {field_type}")
                     if field_type:
                         return field_type
                     self.errors.append(f"Field '{node.member.name}' not found in class '{obj_type.name}'")
@@ -90,7 +93,7 @@ class SemanticAnalyzer:
                     value_type = self.get_type_from_node(var.val)
                     member_type = self.get_type_from_node(var.var)
                     print(f"Присваивание полю {var.var}: ожидается {member_type}, получено {value_type}")
-                    if not self.equals_simple(var.var, var.val):
+                    if member_type and value_type and not self.equals_simple(var.var, var.val):
                         self.errors.append("Ошибка: присвоение string в поле типа int внутри класса")
                 else:
                     var_name = var.var.name
@@ -134,7 +137,7 @@ class SemanticAnalyzer:
             member_type = self.get_type_from_node(node.var)
             value_type = self.get_type_from_node(node.val)
             print(f"Присваивание полю {node.var}: ожидается {member_type}, получено {value_type}")
-            if not self.equals_simple(node.var, node.val):
+            if member_type and value_type and not self.equals_simple(node.var, node.val):
                 self.errors.append("Ошибка: присвоение string в поле типа int внутри класса")
             if id(node.val) not in self._visited_nodes:
                 self._visited_nodes.add(id(node.val))
@@ -205,9 +208,9 @@ class SemanticAnalyzer:
             self.current_scope = old_scope
 
     def check_boolean_condition(self, cond_node):
-        cond_type = self.get_type_from_node(cond_node)
-        if not isinstance(cond_type, PrimitiveType) or cond_type.name != "bool":
-            self.errors.append(f"Condition must be boolean, got {cond_type}")
+        const_type = self.get_type_from_node(cond_node)
+        if not isinstance(const_type, PrimitiveType) or const_type.name != "bool":
+            self.errors.append(f"Condition must be boolean, got {const_type}")
 
     def visit_FuncDeclNode(self, node):
         print(f"Обрабатываем FuncDeclNode: {node}")
@@ -243,7 +246,13 @@ class SemanticAnalyzer:
         for stmt in node.body.stmts:
             if isinstance(stmt, VarsDeclNode):
                 var_type = get_type_from_typename(stmt.type.typename)
+                vars_flat = []
                 for var in stmt.vars:
+                    if isinstance(var, list):
+                        vars_flat.extend(var)
+                    else:
+                        vars_flat.append(var)
+                for var in vars_flat:
                     if isinstance(var, IdentNode):
                         var_name = var.name
                         self.classes[class_name]['fields'][var_name] = var_type
@@ -255,7 +264,9 @@ class SemanticAnalyzer:
                             self.errors.append(f"Type mismatch in field {var_name}: cannot assign {value_type} to {var_type}")
                         self.classes[class_name]['fields'][var_name] = var_type
                         print(f"Добавлено поле {var_name}: {var_type} в класс {class_name}")
-        self.visit(node.body)
+                    else:
+                        print(f"DEBUG: Неожиданный тип var: {type(var)} в stmt.vars")
+        print(f"DEBUG: После обработки класса {class_name}: {self.classes}")
         self.current_scope = old_scope
 
     def generic_visit(self, node):
