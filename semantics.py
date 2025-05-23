@@ -138,7 +138,7 @@ class SemanticAnalyzer:
             value_type = self.get_type_from_node(node.val)
             print(f"Присваивание полю {node.var}: ожидается {member_type}, получено {value_type}")
             if member_type and value_type and not self.equals_simple(node.var, node.val):
-                self.errors.append("Ошибка: присвоение string в поле типа int внутри класса")
+                self.errors.append(f"Ошибка: присвоение {value_type} полю {node.var} типа {member_type}")
             if id(node.val) not in self._visited_nodes:
                 self._visited_nodes.add(id(node.val))
                 self.visit(node.val)
@@ -154,14 +154,14 @@ class SemanticAnalyzer:
                     break
                 current_scope = current_scope.parent
             if not var_type:
-                self.errors.append(f"Undefined variable '{var_name}'")
+                self.errors.append(f"Ошибка: переменная '{var_name}' не объявлена")
                 return
             if id(node.val) not in self._visited_nodes:
                 self._visited_nodes.add(id(node.val))
                 self.visit(node.val)
             value_type = self.get_type_from_node(node.val)
             if not self.equals_simple(node.var, node.val):
-                self.errors.append(f"Type mismatch: cannot assign {value_type} to {var_type}")
+                self.errors.append(f"Ошибка: присвоение {value_type} переменной '{var_name}' типа {var_type}")
 
     def analyze(self, node):
         print(f"Анализируем узел: {node}")

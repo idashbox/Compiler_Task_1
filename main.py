@@ -103,13 +103,24 @@ def main():
     bool result = c > 10 || b < 2;
     ''')
 
+    # prog = mel_parser.parse('''
+    #     class Point {
+    #         int x = 0;
+    #         int y = 0;
+    #     }
+    #     Point p;
+    #     p.x = 5;
+    # ''')
+
     prog = mel_parser.parse('''
-        class Point {
-            int x = 0;
-            int y = 0;
-        }
-        Point p;
-        p.x = "5";
+            class Point {
+                int x = 0;
+                int y = 0;
+            }
+            Point p1;
+            Point p2;
+            p1.x = 5;
+            p2.x = 10;
     ''')
 
     prog1 = mel_parser.parse('''

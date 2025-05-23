@@ -26,9 +26,23 @@ class Interpreter:
         return val
 
     def eval_AssignNode(self, node: AssignNode):
-        name = node.var.name
         value = self.eval(node.val)
-        self.variables[name] = value
+        if isinstance(node.var, IdentNode):
+            # Простое присваивание переменной
+            name = node.var.name
+            self.variables[name] = value
+        elif isinstance(node.var, MemberAccessNode):
+            # Присваивание полю объекта
+            obj_name = node.var.obj.name  # Имя объекта (например, "p")
+            field_name = node.var.member.name  # Имя поля (например, "x")
+            obj = self.variables.get(obj_name)
+            if obj is None:
+                raise Exception(f"Объект '{obj_name}' не определён")
+            if not isinstance(obj, dict):
+                raise Exception(f"'{obj_name}' не является объектом")
+            obj[field_name] = value
+        else:
+            raise Exception(f"Неподдерживаемый тип переменной в присваивании: {type(node.var)}")
         return value
 
     def eval_ArrayNode(self, node: ArrayNode):
@@ -122,11 +136,6 @@ class Interpreter:
 
     def eval_ClassDeclNode(self, node: ClassDeclNode):
         self.classes[node.name.name] = node
-
-        # Временно исполняем тело класса, чтобы переменные были видны в глобальной области
-        for stmt in node.body.stmts:
-            self.eval(stmt)
-
         return None
 
     def eval_VarsDeclNode(self, node: VarsDeclNode):
@@ -137,8 +146,29 @@ class Interpreter:
                 else:
                     yield stmt
 
+        type_name = node.type.typename  # Имя типа (например, "Point", "int", "int[]")
+        is_class_type = type_name in self.classes  # Проверяем, является ли тип классом
+
         for decl in flatten(node.vars):
-            if isinstance(decl, (AssignNode, IdentNode)):
+            if isinstance(decl, IdentNode):
+                var_name = decl.name
+                if is_class_type:
+                    # Создаём объект класса
+                    class_node = self.classes[type_name]
+                    obj = {}
+                    # Инициализируем поля класса значениями по умолчанию
+                    for stmt in class_node.body.stmts:
+                        if isinstance(stmt, VarsDeclNode):
+                            for var in stmt.vars:
+                                if isinstance(var, IdentNode):
+                                    obj[var.name] = 0  # Значение по умолчанию для int
+                                elif isinstance(var, AssignNode):
+                                    obj[var.var.name] = self.eval(var.val)
+                    self.variables[var_name] = obj
+                else:
+                    # Для примитивных типов просто объявляем переменную
+                    self.variables[var_name] = None
+            elif isinstance(decl, AssignNode):
                 self.eval(decl)
             else:
                 print(f"[WARN] Неизвестный элемент в VarsDeclNode: {decl}")
