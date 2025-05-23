@@ -1,6 +1,7 @@
 from mel_ast import *
 from scope import Scope
-from mel_types import PrimitiveType, ArrayType, ClassType, Type, equals_simple_type, get_type_from_typename
+from mel_types import PrimitiveType, ArrayType, ClassType, Type, equals_simple_type, get_type_from_typename, INT
+
 
 class SemanticAnalyzer:
     def __init__(self):
@@ -38,15 +39,10 @@ class SemanticAnalyzer:
                 return ArrayType(element_type)
             return ArrayType(PrimitiveType("int"))
         elif isinstance(node, VarsDeclNode):
-            if isinstance(node.type, TypeDeclNode):
-                if isinstance(node.type.typename, ArrayTypeNode):
-                    return ArrayType(get_type_from_typename(node.type.typename.name))
-                return get_type_from_typename(node.type.typename)
+            return get_type_from_typename(node.type.typename)
         elif isinstance(node, AssignNode):
             return self.get_type_from_node(node.val)
         elif isinstance(node, TypeDeclNode):
-            if isinstance(node.typename, ArrayTypeNode):
-                return ArrayType(get_type_from_typename(node.typename.name))
             return get_type_from_typename(node.typename)
         elif isinstance(node, ArrayTypeNode):
             return ArrayType(get_type_from_typename(node.name))
@@ -93,7 +89,7 @@ class SemanticAnalyzer:
                     value_type = self.get_type_from_node(var.val)
                     member_type = self.get_type_from_node(var.var)
                     print(f"Присваивание полю {var.var}: ожидается {member_type}, получено {value_type}")
-                    if member_type and value_type and not self.equals_simple(var.var, var.val):
+                    if member_type and value_type and not equals_simple_type(member_type, value_type):
                         self.errors.append("Ошибка: присвоение string в поле типа int внутри класса")
                 else:
                     var_name = var.var.name
@@ -101,8 +97,9 @@ class SemanticAnalyzer:
                         self._visited_nodes.add(id(var.val))
                         self.visit(var.val)
                     value_type = self.get_type_from_node(var.val)
-                    print(f"Объявление переменной: {var_name} типа {var_type} с присваиванием {value_type} в области {id(self.current_scope)}")
-                    if not self.equals_simple(var.var, var.val):
+                    print(
+                        f"Объявление переменной: {var_name} типа {var_type} с присваиванием {value_type} в области {id(self.current_scope)}")
+                    if not equals_simple_type(var_type, value_type):
                         self.errors.append(f"Type mismatch: cannot assign {value_type} to {var_type}")
                     try:
                         self.current_scope.declare(var_name, var_type)
@@ -127,7 +124,7 @@ class SemanticAnalyzer:
             return None
         for i, (arg, expected_type) in enumerate(zip(actual_args, expected_param_types)):
             arg_type = self.get_type_from_node(arg)
-            print(f"Аргумент {i+1}: ожидается {expected_type}, получено {arg_type}")
+            print(f"Аргумент {i + 1}: ожидается {expected_type}, получено {arg_type}")
             if not equals_simple_type(arg_type, expected_type):
                 self.errors.append("Ошибка: передан аргумент string вместо int")
         return func_info['return_type']
@@ -236,6 +233,33 @@ class SemanticAnalyzer:
         self.visit(node.body)
         self.current_scope = old_scope
 
+    def visit_ArrayAssignNode(self, node):
+        print(f"Обрабатываем ArrayAssignNode: {node}")
+        # Получаем тип массива
+        array_type = self.get_type_from_node(node.ident)
+        if not isinstance(array_type, ArrayType):
+            self.errors.append(f"Переменная '{node.ident.name}' не является массивом")
+            return
+        # Получаем тип элемента массива
+        element_type = array_type.base_type
+        # Получаем тип присваиваемого значения
+        value_type = self.get_type_from_node(node.value)
+        print(f"Присваивание элементу массива: ожидается {element_type}, получено {value_type}")
+        # Проверяем совместимость типов
+        if not equals_simple_type(element_type, value_type):
+            self.errors.append(f"Ошибка: присвоение {value_type} в элемент массива типа {element_type}")
+        # Проверяем тип индекса
+        index_type = self.get_type_from_node(node.index)
+        if not equals_simple_type(index_type, INT):
+            self.errors.append(f"Ошибка: индекс массива должен быть типа int, получено {index_type}")
+        # Обходим дочерние узлы, чтобы избежать повторного посещения
+        if id(node.index) not in self._visited_nodes:
+            self._visited_nodes.add(id(node.index))
+            self.visit(node.index)
+        if id(node.value) not in self._visited_nodes:
+            self._visited_nodes.add(id(node.value))
+            self.visit(node.value)
+
     def visit_ClassDeclNode(self, node):
         print(f"Обрабатываем ClassDeclNode: {node}")
         class_name = node.name.name
@@ -261,7 +285,8 @@ class SemanticAnalyzer:
                         var_name = var.var.name
                         value_type = self.get_type_from_node(var.val)
                         if not self.equals_simple(var.var, var.val):
-                            self.errors.append(f"Type mismatch in field {var_name}: cannot assign {value_type} to {var_type}")
+                            self.errors.append(
+                                f"Type mismatch in field {var_name}: cannot assign {value_type} to {var_type}")
                         self.classes[class_name]['fields'][var_name] = var_type
                         print(f"Добавлено поле {var_name}: {var_type} в класс {class_name}")
                     else:

@@ -90,8 +90,7 @@ parser = Lark('''
     class_decl: "class" CNAME "{" stmt_list? "}"
     member_access: CNAME DOT CNAME
 
-    ?stmt1: array_assign_stmt
-      | array_assign             -> array_assign
+    ?stmt1: array_assign             -> array_assign
       | member_access "=" expr   -> assign
       | CNAME "=" expr           -> assign
       | "return" expr            -> return
@@ -114,6 +113,7 @@ parser = Lark('''
     ?start: prog
 
 ''', start="start")
+
 
 class MelASTBuilder(Transformer):
     def _call_userfunc(self, tree, new_children=None):
@@ -140,6 +140,7 @@ class MelASTBuilder(Transformer):
             def get_bin_op_node(arg1, arg2):
                 op = BinOp[item.upper()]
                 return BinOpNode(op, arg1, arg2)
+
             return get_bin_op_node
         if item == 'assign':
             def get_assign_node(var, val):
@@ -148,6 +149,7 @@ class MelASTBuilder(Transformer):
                 if isinstance(val, Token):
                     val = IdentNode(str(val))
                 return AssignNode(var, val)
+
             return get_assign_node
         else:
             def get_node(*args):
@@ -161,6 +163,7 @@ class MelASTBuilder(Transformer):
                     return cls(*args)
                 else:
                     raise NameError(f"Класс {cls_name} не определён")
+
             return get_node
 
     def array_assign(self, array_name, index_expr, value_expr):
@@ -178,6 +181,9 @@ class MelASTBuilder(Transformer):
 
     def array_assign_stmt(self, items):
         return AssignNode(items[0], items[1])
+
+    def array_type(self, name):
+        return TypeDeclNode(f"{name}[]")
 
     def array_init(self, name, array):
         if isinstance(name, Token):

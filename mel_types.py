@@ -4,6 +4,7 @@ from mel_ast import AstNode, LiteralNode, VarsDeclNode, TypeDeclNode, ArrayTypeN
 
 class Type:
     """Базовый класс всех типов."""
+
     def __eq__(self, other):
         return equals_simple_type(self, other)
 
@@ -57,8 +58,6 @@ STRING = PrimitiveType("string")
 BOOL = PrimitiveType("bool")
 
 
-
-
 def get_type_from_typename(typename: str) -> Type:
     """Преобразует имя типа в объект Type."""
     if typename == "int":
@@ -73,7 +72,6 @@ def get_type_from_typename(typename: str) -> Type:
         return ArrayType(get_type_from_typename(typename[:-2]))
     else:
         return ClassType(typename)
-
 
 
 def equals_simple_type(type1: Type, type2: Type) -> bool:
