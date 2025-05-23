@@ -5,7 +5,7 @@ from mel_ast import AstNode, LiteralNode, VarsDeclNode, TypeDeclNode, ArrayTypeN
 class Type:
     """Базовый класс всех типов."""
     def __eq__(self, other):
-        return equals_simple(self, other)
+        return equals_simple_type(self, other)
 
     def __str__(self):
         return self.__class__.__name__
@@ -73,27 +73,6 @@ def get_type_from_typename(typename: str) -> Type:
         # Предполагаем, что это имя класса
         return ClassType(typename)
 
-
-def equals_simple(self, node1: AstNode, node2: AstNode) -> bool:
-    type1 = self.get_type_from_node(node1)
-    type2 = self.get_type_from_node(node2)
-    print(type1, type2)  # Для отладки
-
-    # Примитивные типы
-    if isinstance(type1, PrimitiveType) and isinstance(type2, PrimitiveType):
-        print(type1.name, type2.name)
-        return type1.name == type2.name
-
-    # Массивы
-    if isinstance(type1, ArrayType) and isinstance(type2, ArrayType):
-        print(type1.base_type, type2.base_type)
-        return equals_simple_type(type1.base_type, type2.base_type)
-
-    # Классы
-    if isinstance(type1, ClassType) and isinstance(type2, ClassType):
-        return type1.name == type2.name
-
-    return False
 
 
 def equals_simple_type(type1: Type, type2: Type) -> bool:

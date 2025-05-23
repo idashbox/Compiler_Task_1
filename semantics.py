@@ -1,6 +1,6 @@
 from mel_ast import *
 from scope import Scope
-from mel_types import equals_simple, PrimitiveType, ArrayType, ClassType, Type, equals_simple_type
+from mel_types import  PrimitiveType, ArrayType, ClassType, Type, equals_simple_type
 
 
 class SemanticAnalyzer:
@@ -10,6 +10,7 @@ class SemanticAnalyzer:
         self.global_scope = self.current_scope
         self.classes = {}
         self.functions = {}
+        self._visited_nodes = set()  # Для предотвращения повторного анализа узлов
 
     def get_type_from_node(self, node):
         if isinstance(node, LiteralNode):
@@ -52,8 +53,9 @@ class SemanticAnalyzer:
         elif isinstance(node, ArrayTypeNode):
             return ArrayType(get_type_from_typename(node.name))
         elif isinstance(node, FuncCallNode):
-            # Вызываем visit_FuncCallNode для проверки аргументов и получения типа
-            return self.visit(node) or PrimitiveType("int")
+            # Не вызываем visit здесь, полагаемся на visit_VarsDeclNode
+            func_info = self.functions.get(node.func.name)
+            return func_info['return_type'] if func_info else PrimitiveType("int")
         return None
 
     def visit_VarsDeclNode(self, node):
@@ -78,10 +80,13 @@ class SemanticAnalyzer:
                     self.errors.append(str(e))
             elif isinstance(var, AssignNode):
                 var_name = var.var.name
-                self.visit(var.val)  # Анализируем значение
+                # Анализируем значение и получаем тип
+                if id(var.val) not in self._visited_nodes:
+                    self._visited_nodes.add(id(var.val))
+                    self.visit(var.val)  # Анализируем значение только один раз
                 value_type = self.get_type_from_node(var.val)
                 print(f"Объявление переменной: {var_name} типа {var_type} с присваиванием {value_type} в области {id(self.current_scope)}")
-                if not self.equals_simple(var.var, var.val):  # Исправлено: var.var вместо var
+                if not self.equals_simple(var.var, var.val):
                     self.errors.append(f"Type mismatch: cannot assign {value_type} to {var_type}")
                 try:
                     self.current_scope.declare(var_name, var_type)
@@ -90,27 +95,6 @@ class SemanticAnalyzer:
                     self.errors.append(str(e))
             else:
                 print(f"Неизвестный тип var: {type(var)}")
-
-    def visit_AssignNode(self, node):
-        var_name = node.var.name
-        print(f"Поиск переменной '{var_name}' в области {id(self.current_scope)}")
-        var_type = None
-        current_scope = self.current_scope
-        while current_scope:
-            var_type = current_scope.lookup(var_name)
-            print(f"Проверяем область {id(current_scope)}: {var_type}")
-            if var_type:
-                break
-            current_scope = current_scope.parent
-        if not var_type:
-            self.errors.append(f"Undefined variable '{var_name}'")
-            return
-
-        # Посещаем значение для анализа и получения его типа
-        self.visit(node.val)
-        value_type = self.get_type_from_node(node.val)
-        if not self.equals_simple(node.var, node.val):  # Исправлено: node.var вместо var
-            self.errors.append(f"Type mismatch: cannot assign {value_type} to {var_type}")
 
     def visit_FuncCallNode(self, node):
         print(f"Обрабатываем FuncCallNode: {node}")
@@ -141,8 +125,33 @@ class SemanticAnalyzer:
         # Возвращаем тип возвращаемого значения функции
         return func_info['return_type']
 
+    # Остальные методы остаются без изменений
+    def visit_AssignNode(self, node):
+        var_name = node.var.name
+        print(f"Поиск переменной '{var_name}' в области {id(self.current_scope)}")
+        var_type = None
+        current_scope = self.current_scope
+        while current_scope:
+            var_type = current_scope.lookup(var_name)
+            print(f"Проверяем область {id(current_scope)}: {var_type}")
+            if var_type:
+                break
+            current_scope = current_scope.parent
+        if not var_type:
+            self.errors.append(f"Undefined variable '{var_name}'")
+            return
+
+        # Посещаем значение для анализа и получения его типа
+        if id(node.val) not in self._visited_nodes:
+            self._visited_nodes.add(id(node.val))
+            self.visit(node.val)
+        value_type = self.get_type_from_node(node.val)
+        if not self.equals_simple(node.var, node.val):
+            self.errors.append(f"Type mismatch: cannot assign {value_type} to {var_type}")
+
     def analyze(self, node):
         print(f"Анализируем узел: {node}")
+        self._visited_nodes.clear()  # Очищаем кэш перед новым анализом
         self.visit(node)
         return self.errors
 
@@ -170,7 +179,9 @@ class SemanticAnalyzer:
             self.current_scope = old_scope
 
     def visit_IfNode(self, node):
-        self.visit(node.cond)
+        if id(node.cond) not in self._visited_nodes:
+            self._visited_nodes.add(id(node.cond))
+            self.visit(node.cond)
         self.check_boolean_condition(node.cond)
         old_scope = self.current_scope
         self.current_scope = Scope(parent=old_scope)
@@ -223,7 +234,8 @@ class SemanticAnalyzer:
     def generic_visit(self, node):
         if hasattr(node, 'children'):
             for child in node.children:
-                if child is not None:
+                if child is not None and id(child) not in self._visited_nodes:
+                    self._visited_nodes.add(id(child))
                     self.visit(child)
 
     def equals_simple(self, node1: AstNode, node2: AstNode) -> bool:
