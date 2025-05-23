@@ -92,6 +92,7 @@ parser = Lark('''
 
     ?stmt1: array_assign_stmt
       | array_assign             -> array_assign
+      | member_access "=" expr   -> assign
       | CNAME "=" expr           -> assign
       | "return" expr            -> return
       | type_decl var_decl       -> typed_decl
@@ -195,10 +196,9 @@ class MelASTBuilder(Transformer):
         return VarsDeclNode(typ, [name])
 
     def typed_decl(self, typ, decl):
-        print(f"typed_decl: typ={typ}, decl={decl}")  # Оставляем для отладки
+        print(f"typed_decl: typ={typ}, decl={decl}")
         if isinstance(decl, Token):
             decl = IdentNode(str(decl))
-        # Передаём decl как одиночный элемент, а не список
         return VarsDeclNode(typ, [decl] if not isinstance(decl, list) else decl)
 
     def func_decl(self, ret_type, name, params=None, body=None):
@@ -222,8 +222,23 @@ class MelASTBuilder(Transformer):
     def prog(self, *stmts):
         return StmtListNode(list(stmts))
 
+    def member_access(self, *args):
+        # Ожидаем: [obj, DOT, member] или [obj, member]
+        if len(args) == 3:
+            obj, _, member = args  # Игнорируем DOT
+        elif len(args) == 2:
+            obj, member = args
+        else:
+            raise ValueError(f"Неверное количество аргументов для member_access: {args}")
+        if isinstance(obj, Token):
+            obj = IdentNode(str(obj))
+        if isinstance(member, Token):
+            member = IdentNode(str(member))
+        return MemberAccessNode(obj, member)
 
-def parse(prog: str)->StmtListNode:
+
+def parse(prog: str) -> StmtListNode:
     prog = parser.parse(str(prog))
     prog = MelASTBuilder().transform(prog)
+    print(f"DEBUG: Parsed AST: {prog.tree}")
     return prog

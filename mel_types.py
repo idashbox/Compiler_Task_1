@@ -69,8 +69,9 @@ def get_type_from_typename(typename: str) -> Type:
         return STRING
     elif typename == "bool":
         return BOOL
+    elif typename.endswith("[]"):
+        return ArrayType(get_type_from_typename(typename[:-2]))
     else:
-        # Предполагаем, что это имя класса
         return ClassType(typename)
 
 
