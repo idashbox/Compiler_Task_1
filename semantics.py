@@ -1,6 +1,6 @@
 from mel_ast import *
 from scope import Scope
-from mel_types import get_type_from_node, equals_simple, PrimitiveType, ArrayType, ClassType, Type, equals_simple_type
+from mel_types import equals_simple, PrimitiveType, ArrayType, ClassType, Type, equals_simple_type
 
 
 class SemanticAnalyzer:
@@ -11,33 +11,50 @@ class SemanticAnalyzer:
         self.classes = {}
         self.functions = {}
 
-    def analyze(self, node):
-        print(f"Анализируем узел: {node}")
-        self.visit(node)
-        return self.errors
-
-    def visit(self, node):
-        if isinstance(node, list):
-            for item in node:
-                self.visit(item)
-            return
-        method_name = f'visit_{type(node).__name__}'
-        method = getattr(self, method_name, self.generic_visit)
-        print(f"Вызываем метод: {method_name} для {node}")
-        method(node)
-
-    def visit_StmtListNode(self, node):
-        print(f"StmtListNode: {len(node.stmts)} операторов, область {id(self.current_scope)}, stmts: {node.stmts}")
-        if self.current_scope is self.global_scope:
-            for stmt in node.stmts:
-                self.visit(stmt)
-        else:
-            old_scope = self.current_scope
-            self.current_scope = Scope(parent=old_scope)
-            print(f"Создана новая область: {id(self.current_scope)}, родитель: {id(old_scope)}")
-            for stmt in node.stmts:
-                self.visit(stmt)
-            self.current_scope = old_scope
+    def get_type_from_node(self, node):
+        if isinstance(node, LiteralNode):
+            value = node.value
+            if isinstance(value, bool):
+                return PrimitiveType("bool")
+            elif isinstance(value, int):
+                return PrimitiveType("int")
+            elif isinstance(value, float):
+                return PrimitiveType("float")
+            elif isinstance(value, str):
+                return PrimitiveType("string")
+        elif isinstance(node, IdentNode):
+            if node.name in ['int', 'float', 'string', 'bool']:
+                return get_type_from_typename(node.name)
+            # Поиск переменной в области видимости
+            current_scope = self.current_scope
+            while current_scope:
+                var_type = current_scope.lookup(node.name)
+                if var_type:
+                    return var_type
+                current_scope = current_scope.parent
+            return PrimitiveType("int")  # По умолчанию
+        elif isinstance(node, ArrayNode):
+            if node.elements:
+                element_type = self.get_type_from_node(node.elements[0])
+                return ArrayType(element_type)
+            return ArrayType(PrimitiveType("int"))
+        elif isinstance(node, VarsDeclNode):
+            if isinstance(node.type, TypeDeclNode):
+                if isinstance(node.type.typename, ArrayTypeNode):
+                    return ArrayType(get_type_from_typename(node.type.typename.name))
+                return get_type_from_typename(node.type.typename)
+        elif isinstance(node, AssignNode):
+            return self.get_type_from_node(node.val)
+        elif isinstance(node, TypeDeclNode):
+            if isinstance(node.typename, ArrayTypeNode):
+                return ArrayType(get_type_from_typename(node.typename.name))
+            return get_type_from_typename(node.typename)
+        elif isinstance(node, ArrayTypeNode):
+            return ArrayType(get_type_from_typename(node.name))
+        elif isinstance(node, FuncCallNode):
+            # Вызываем visit_FuncCallNode для проверки аргументов и получения типа
+            return self.visit(node) or PrimitiveType("int")
+        return None
 
     def visit_VarsDeclNode(self, node):
         print(f"Обрабатываем VarsDeclNode: {node}")
@@ -61,9 +78,10 @@ class SemanticAnalyzer:
                     self.errors.append(str(e))
             elif isinstance(var, AssignNode):
                 var_name = var.var.name
-                value_type = get_type_from_node(var.val)
+                self.visit(var.val)  # Анализируем значение
+                value_type = self.get_type_from_node(var.val)
                 print(f"Объявление переменной: {var_name} типа {var_type} с присваиванием {value_type} в области {id(self.current_scope)}")
-                if not equals_simple_type(var_type, value_type):
+                if not self.equals_simple(var.var, var.val):  # Исправлено: var.var вместо var
                     self.errors.append(f"Type mismatch: cannot assign {value_type} to {var_type}")
                 try:
                     self.current_scope.declare(var_name, var_type)
@@ -81,14 +99,75 @@ class SemanticAnalyzer:
         while current_scope:
             var_type = current_scope.lookup(var_name)
             print(f"Проверяем область {id(current_scope)}: {var_type}")
-            if var_type: break
+            if var_type:
+                break
             current_scope = current_scope.parent
         if not var_type:
             self.errors.append(f"Undefined variable '{var_name}'")
             return
-        value_type = get_type_from_node(node.val)
-        if not equals_simple_type(var_type, value_type):
+
+        # Посещаем значение для анализа и получения его типа
+        self.visit(node.val)
+        value_type = self.get_type_from_node(node.val)
+        if not self.equals_simple(node.var, node.val):  # Исправлено: node.var вместо var
             self.errors.append(f"Type mismatch: cannot assign {value_type} to {var_type}")
+
+    def visit_FuncCallNode(self, node):
+        print(f"Обрабатываем FuncCallNode: {node}")
+        func_name = node.func.name
+
+        # Проверяем, существует ли функция
+        func_info = self.functions.get(func_name)
+        if not func_info:
+            self.errors.append(f"Undefined function '{func_name}'")
+            return None
+
+        # Проверяем количество аргументов
+        expected_param_types = func_info['param_types']
+        actual_args = node.params
+        if len(actual_args) != len(expected_param_types):
+            self.errors.append(
+                f"Expected {len(expected_param_types)} arguments for '{func_name}', got {len(actual_args)}")
+            return None
+
+        # Проверяем типы аргументов
+        for i, (arg, expected_type) in enumerate(zip(actual_args, expected_param_types)):
+            arg_type = self.get_type_from_node(arg)
+            print(f"Аргумент {i+1}: ожидается {expected_type}, получено {arg_type}")
+            if not equals_simple_type(arg_type, expected_type):
+                self.errors.append(
+                    f"Type mismatch in argument {i + 1} of '{func_name}': expected {expected_type}, got {arg_type}")
+
+        # Возвращаем тип возвращаемого значения функции
+        return func_info['return_type']
+
+    def analyze(self, node):
+        print(f"Анализируем узел: {node}")
+        self.visit(node)
+        return self.errors
+
+    def visit(self, node):
+        if isinstance(node, list):
+            for item in node:
+                self.visit(item)
+            return
+        method_name = f'visit_{type(node).__name__}'
+        method = getattr(self, method_name, self.generic_visit)
+        print(f"Вызываем метод: {method_name} для {node}")
+        return method(node)
+
+    def visit_StmtListNode(self, node):
+        print(f"StmtListNode: {len(node.stmts)} операторов, область {id(self.current_scope)}, stmts: {node.stmts}")
+        if self.current_scope is self.global_scope:
+            for stmt in node.stmts:
+                self.visit(stmt)
+        else:
+            old_scope = self.current_scope
+            self.current_scope = Scope(parent=old_scope)
+            print(f"Создана новая область: {id(self.current_scope)}, родитель: {id(old_scope)}")
+            for stmt in node.stmts:
+                self.visit(stmt)
+            self.current_scope = old_scope
 
     def visit_IfNode(self, node):
         self.visit(node.cond)
@@ -104,9 +183,42 @@ class SemanticAnalyzer:
             self.current_scope = old_scope
 
     def check_boolean_condition(self, cond_node):
-        cond_type = get_type_from_node(cond_node)
+        cond_type = self.get_type_from_node(cond_node)
         if not isinstance(cond_type, PrimitiveType) or cond_type.name != "bool":
             self.errors.append(f"Condition must be boolean, got {cond_type}")
+
+    def visit_FuncDeclNode(self, node):
+        print(f"Обрабатываем FuncDeclNode: {node}")
+        func_name = node.name.name
+        return_type = get_type_from_typename(node.return_type.typename)
+        param_types = []
+
+        # Извлекаем типы параметров
+        for param in node.params.vars:
+            param_type = get_type_from_typename(param.type.typename)
+            param_types.append(param_type)
+
+        # Сохраняем информацию о функции
+        self.functions[func_name] = {
+            'return_type': return_type,
+            'param_types': param_types,
+            'node': node
+        }
+        print(f"Функция {func_name} сохранена с возвращаемым типом {return_type} и параметрами {param_types}")
+
+        # Анализируем тело функции
+        old_scope = self.current_scope
+        self.current_scope = Scope(parent=old_scope)
+        print(f"Создана область для функции: {id(self.current_scope)}, родитель: {id(old_scope)}")
+
+        # Объявляем параметры в новой области
+        for param, param_type in zip(node.params.vars, param_types):
+            for var in param.vars:
+                if isinstance(var, IdentNode):
+                    self.current_scope.declare(var.name, param_type)
+
+        self.visit(node.body)
+        self.current_scope = old_scope
 
     def generic_visit(self, node):
         if hasattr(node, 'children'):
@@ -114,11 +226,36 @@ class SemanticAnalyzer:
                 if child is not None:
                     self.visit(child)
 
+    def equals_simple(self, node1: AstNode, node2: AstNode) -> bool:
+        type1 = self.get_type_from_node(node1)
+        type2 = self.get_type_from_node(node2)
+        print(type1, type2)  # Для отладки
+
+        # Примитивные типы
+        if isinstance(type1, PrimitiveType) and isinstance(type2, PrimitiveType):
+            print(type1.name, type2.name)
+            return type1.name == type2.name
+
+        # Массивы
+        if isinstance(type1, ArrayType) and isinstance(type2, ArrayType):
+            print(type1.base_type, type2.base_type)
+            return equals_simple_type(type1.base_type, type2.base_type)
+
+        # Классы
+        if isinstance(type1, ClassType) and isinstance(type2, ClassType):
+            return type1.name == type2.name
+
+        return False
+
 def get_type_from_typename(typename: str) -> Type:
-    if typename == "int": return PrimitiveType("int")
-    if typename == "float": return PrimitiveType("float")
-    if typename == "string": return PrimitiveType("string")
-    if typename == "bool": return PrimitiveType("bool")
-    if typename.endswith("[]"):
+    if typename == "int":
+        return PrimitiveType("int")
+    elif typename == "float":
+        return PrimitiveType("float")
+    elif typename == "string":
+        return PrimitiveType("string")
+    elif typename == "bool":
+        return PrimitiveType("bool")
+    elif typename.endswith("[]"):
         return ArrayType(get_type_from_typename(typename[:-2]))
     return ClassType(typename)

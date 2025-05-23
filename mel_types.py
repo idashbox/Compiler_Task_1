@@ -1,4 +1,5 @@
-from mel_ast import AstNode, LiteralNode, VarsDeclNode, TypeDeclNode, ArrayTypeNode, IdentNode, ArrayNode, AssignNode
+from mel_ast import AstNode, LiteralNode, VarsDeclNode, TypeDeclNode, ArrayTypeNode, IdentNode, ArrayNode, AssignNode, \
+    FuncCallNode
 
 
 class Type:
@@ -56,41 +57,7 @@ STRING = PrimitiveType("string")
 BOOL = PrimitiveType("bool")
 
 
-def get_type_from_node(node):
-    if isinstance(node, LiteralNode):
-        value = node.value
-        if isinstance(value, bool):
-            return PrimitiveType("bool")
-        elif isinstance(value, int):
-            return PrimitiveType("int")
-        elif isinstance(value, float):
-            return PrimitiveType("float")
-        elif isinstance(value, str):
-            # Для строк в LiteralNode кавычки уже убраны, просто возвращаем string
-            return PrimitiveType("string")
-    elif isinstance(node, IdentNode):
-        if node.name in ['int', 'float', 'string', 'bool']:
-            return get_type_from_typename(node.name)
-        return PrimitiveType("int")  # По умолчанию
-    elif isinstance(node, ArrayNode):
-        if node.elements:
-            element_type = get_type_from_node(node.elements[0])
-            return ArrayType(element_type)
-        return ArrayType(PrimitiveType("int"))
-    elif isinstance(node, VarsDeclNode):
-        if isinstance(node.type, TypeDeclNode):
-            if isinstance(node.type.typename, ArrayTypeNode):
-                return ArrayType(get_type_from_typename(node.type.typename.name))
-            return get_type_from_typename(node.type.typename)
-    elif isinstance(node, AssignNode):
-        return get_type_from_node(node.var)
-    elif isinstance(node, TypeDeclNode):
-        if isinstance(node.typename, ArrayTypeNode):
-            return ArrayType(get_type_from_typename(node.typename.name))
-        return get_type_from_typename(node.typename)
-    elif isinstance(node, ArrayTypeNode):
-        return ArrayType(get_type_from_typename(node.name))
-    return None
+
 
 def get_type_from_typename(typename: str) -> Type:
     """Преобразует имя типа в объект Type."""
@@ -107,10 +74,10 @@ def get_type_from_typename(typename: str) -> Type:
         return ClassType(typename)
 
 
-def equals_simple(node1: AstNode, node2: AstNode) -> bool:
-    type1 = get_type_from_node(node1)
-    type2 = get_type_from_node(node2)
-    print(type1, type2)  # Добавьте эту строку для отладки
+def equals_simple(self, node1: AstNode, node2: AstNode) -> bool:
+    type1 = self.get_type_from_node(node1)
+    type2 = self.get_type_from_node(node2)
+    print(type1, type2)  # Для отладки
 
     # Примитивные типы
     if isinstance(type1, PrimitiveType) and isinstance(type2, PrimitiveType):
