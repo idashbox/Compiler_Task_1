@@ -12,10 +12,10 @@ def test_scope_and_types():
             int x = 5;
             bool true;
             if (true){
-                int x = "hello";
+                x = "hello";
             }
             ''',
-            "Ошибка: присвоение string в переменную типа int внутри блока"
+            "Type mismatch: cannot assign string to int"
         ),
         (
             '''
