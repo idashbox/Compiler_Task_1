@@ -117,8 +117,8 @@ def main():
                 int x = 0;
                 int y = 0;
             }
-            Point p1;
-            Point p2;
+            Point p2 = new Point();
+            Point p1 = new Point();
             p1.x = 5;
             p2.x = 10;
     ''')

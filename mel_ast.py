@@ -492,6 +492,19 @@ class FuncDeclNode(StmtNode):
         return f'func {self.name}'
 
 
+class NewInstanceNode(ExprNode):
+    def __init__(self, class_name: IdentNode):
+        super().__init__()
+        self.class_name = class_name
+
+    @property
+    def children(self) -> Tuple[IdentNode]:
+        return (self.class_name,)
+
+    def __str__(self) -> str:
+        return f'new {self.class_name}'
+
+
 class ReturnNode(StmtNode):
     def __init__(self, result: ExprNode):
         super().__init__()

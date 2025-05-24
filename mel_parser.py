@@ -33,6 +33,7 @@ parser = Lark('''
         | func_call
         | "(" expr ")"
         | array_index
+        | new_expr
 
     ?array_index: CNAME "[" expr "]" -> array_index
 
@@ -73,6 +74,7 @@ parser = Lark('''
 
     none_stmt:   -> stmt_list
     none_expr: -> empty
+    new_expr: "new" CNAME "(" ")"  -> new_instance
     array_assign_stmt: array_access "=" expr ";"
     array_access: expr "[" expr "]"
     array_assign: CNAME "[" expr "]" "=" expr -> array_assign
@@ -189,6 +191,11 @@ class MelASTBuilder(Transformer):
         if isinstance(name, Token):
             name = IdentNode(str(name))
         return AssignNode(name, array)
+
+    def new_instance(self, class_name):
+        if isinstance(class_name, Token):
+            class_name = IdentNode(str(class_name))
+        return NewInstanceNode(class_name)
 
     def class_decl(self, name, body=None):
         if body is None:

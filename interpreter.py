@@ -76,6 +76,36 @@ class Interpreter:
 
         array[index] = value
 
+    def eval_NewInstanceNode(self, node: NewInstanceNode):
+        class_name = node.class_name.name
+        class_node = self.classes.get(class_name)
+        if not class_node:
+            raise Exception(f"Класс '{class_name}' не определён")
+
+        # Создаём новый объект как словарь
+        obj = {}
+        # Инициализируем поля класса значениями по умолчанию или заданными значениями
+        for stmt in class_node.body.stmts:
+            if isinstance(stmt, VarsDeclNode):
+                for var in stmt.vars:
+                    if isinstance(var, IdentNode):
+                        # Значение по умолчанию для примитивных типов
+                        type_name = stmt.type.typename
+                        if type_name == "int":
+                            obj[var.name] = 0
+                        elif type_name == "float":
+                            obj[var.name] = 0.0
+                        elif type_name == "bool":
+                            obj[var.name] = False
+                        elif type_name == "string":
+                            obj[var.name] = ""
+                        else:
+                            obj[var.name] = None  # Для классов или массивов
+                    elif isinstance(var, AssignNode):
+                        # Если поле инициализировано значением
+                        obj[var.var.name] = self.eval(var.val)
+        return obj
+
     def eval_BinOpNode(self, node: BinOpNode):
         left = self.eval(node.arg1)
         right = self.eval(node.arg2)
@@ -153,23 +183,19 @@ class Interpreter:
             if isinstance(decl, IdentNode):
                 var_name = decl.name
                 if is_class_type:
-                    # Создаём объект класса
-                    class_node = self.classes[type_name]
-                    obj = {}
-                    # Инициализируем поля класса значениями по умолчанию
-                    for stmt in class_node.body.stmts:
-                        if isinstance(stmt, VarsDeclNode):
-                            for var in stmt.vars:
-                                if isinstance(var, IdentNode):
-                                    obj[var.name] = 0  # Значение по умолчанию для int
-                                elif isinstance(var, AssignNode):
-                                    obj[var.var.name] = self.eval(var.val)
-                    self.variables[var_name] = obj
+                    # Для классов переменная изначально None, если не инициализирована
+                    self.variables[var_name] = None
                 else:
                     # Для примитивных типов просто объявляем переменную
                     self.variables[var_name] = None
             elif isinstance(decl, AssignNode):
-                self.eval(decl)
+                var_name = decl.var.name
+                value = self.eval(decl.val)
+                if is_class_type and isinstance(decl.val, NewInstanceNode):
+                    # Если это new Point(), то value уже является объектом
+                    self.variables[var_name] = value
+                else:
+                    self.variables[var_name] = value
             else:
                 print(f"[WARN] Неизвестный элемент в VarsDeclNode: {decl}")
 
@@ -202,4 +228,3 @@ class Interpreter:
 
         self.variables = old_variables
         return result
-

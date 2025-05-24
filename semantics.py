@@ -49,6 +49,8 @@ class SemanticAnalyzer:
         elif isinstance(node, FuncCallNode):
             func_info = self.functions.get(node.func.name)
             return func_info['return_type'] if func_info else PrimitiveType("int")
+        elif isinstance(node, NewInstanceNode):
+            return self.visit_NewInstanceNode(node)
         elif isinstance(node, MemberAccessNode):
             obj_type = self.get_type_from_node(node.obj)
             print(f"DEBUG: MemberAccessNode: obj={node.obj}, obj_type={obj_type}, member={node.member.name}")
@@ -63,6 +65,16 @@ class SemanticAnalyzer:
                     self.errors.append(f"Field '{node.member.name}' not found in class '{obj_type.name}'")
             return None
         return None
+
+    def visit_NewInstanceNode(self, node):
+        print(f"Обрабатываем NewInstanceNode: {node}")
+        class_name = node.class_name.name
+        if class_name not in self.classes:
+            self.errors.append(f"Ошибка: класс '{class_name}' не определён")
+            return None
+        # Здесь можно добавить проверку, что конструктор без параметров существует,
+        # но в вашем языке конструкторы не определены явно, поэтому просто возвращаем тип класса
+        return ClassType(class_name)
 
     def visit_VarsDeclNode(self, node):
         print(f"Обрабатываем VarsDeclNode: {node}")
