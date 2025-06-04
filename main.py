@@ -140,6 +140,10 @@ def test_scope_and_types():
 #         int r = sum(3, 4);
 #     ''')
 #
+#     prog = mel_parser.parse('''
+#             int r = 3 + 5;
+#     ''')
+#
 #     analyzer = SemanticAnalyzer()
 #
 #     analyzer.analyze(prog)
