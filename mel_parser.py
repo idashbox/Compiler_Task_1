@@ -33,6 +33,7 @@ parser = Lark('''
         | func_call
         | "(" expr ")"
         | array_index
+        | new_expr
 
     ?array_index: CNAME "[" expr "]" -> array_index
 
@@ -73,6 +74,7 @@ parser = Lark('''
 
     none_stmt:   -> stmt_list
     none_expr: -> empty
+    new_expr: "new" CNAME "(" ")"  -> new_instance
     array_assign_stmt: array_access "=" expr ";"
     array_access: expr "[" expr "]"
     array_assign: CNAME "[" expr "]" "=" expr -> array_assign
@@ -90,8 +92,8 @@ parser = Lark('''
     class_decl: "class" CNAME "{" stmt_list? "}"
     member_access: CNAME DOT CNAME
 
-    ?stmt1: array_assign_stmt
-      | array_assign             -> array_assign
+    ?stmt1: array_assign             -> array_assign
+      | member_access "=" expr   -> assign
       | CNAME "=" expr           -> assign
       | "return" expr            -> return
       | type_decl var_decl       -> typed_decl
@@ -114,17 +116,15 @@ parser = Lark('''
 
 ''', start="start")
 
+
 class MelASTBuilder(Transformer):
     def _call_userfunc(self, tree, new_children=None):
-        # Assumes tree is already transformed
         children = new_children if new_children is not None else tree.children
         try:
             f = getattr(self, tree.data)
         except AttributeError:
             return self.__default__(tree.data, children, tree.meta)
         else:
-            # Печать для отладки:
-            print(f"Обработка узла: {tree.data} с аргументами {children}")
             if tree.data == 'array_assign' and isinstance(children[0], ArrayAssignNode):
                 return children[0]
             return f(*children)
@@ -136,18 +136,14 @@ class MelASTBuilder(Transformer):
             pass
         if isinstance(item, str) and item.upper() == item:
             return lambda x: x
-
         if item == 'true':
             return lambda *args: LiteralNode('true')
-
-        if item in ('mul', 'div', 'add', 'sub',
-                    'gt', 'ge', 'lt', 'le', 'eq', 'ne',
-                    'and', 'or'):
+        if item in ('mul', 'div', 'add', 'sub', 'gt', 'ge', 'lt', 'le', 'eq', 'ne', 'and', 'or'):
             def get_bin_op_node(arg1, arg2):
                 op = BinOp[item.upper()]
                 return BinOpNode(op, arg1, arg2)
-            return get_bin_op_node
 
+            return get_bin_op_node
         if item == 'assign':
             def get_assign_node(var, val):
                 if isinstance(var, Token):
@@ -157,7 +153,6 @@ class MelASTBuilder(Transformer):
                 return AssignNode(var, val)
 
             return get_assign_node
-
         else:
             def get_node(*args):
                 cls_name = ''.join(x.capitalize() or '_' for x in item.split('_')) + 'Node'
@@ -170,12 +165,12 @@ class MelASTBuilder(Transformer):
                     return cls(*args)
                 else:
                     raise NameError(f"Класс {cls_name} не определён")
+
             return get_node
 
     def array_assign(self, array_name, index_expr, value_expr):
         if isinstance(array_name, Token):
             array_name = IdentNode(str(array_name))
-        print(f"Обработка присваивания массива: {array_name}[{index_expr}] = {value_expr}")
         return ArrayAssignNode(array_name, index_expr, value_expr)
 
     def array_index(self, array_name, index_expr):
@@ -189,15 +184,22 @@ class MelASTBuilder(Transformer):
     def array_assign_stmt(self, items):
         return AssignNode(items[0], items[1])
 
+    def array_type(self, name):
+        return TypeDeclNode(f"{name}[]")
+
     def array_init(self, name, array):
         if isinstance(name, Token):
             name = IdentNode(str(name))
         return AssignNode(name, array)
 
+    def new_instance(self, class_name):
+        if isinstance(class_name, Token):
+            class_name = IdentNode(str(class_name))
+        return NewInstanceNode(class_name)
+
     def class_decl(self, name, body=None):
         if body is None:
             body = StmtListNode()
-        print(f"Создание класса: {name}, с телом: {body}")
         return ClassDeclNode(name, body)
 
     def param_decl_list(self, *args):
@@ -207,9 +209,10 @@ class MelASTBuilder(Transformer):
         return VarsDeclNode(typ, [name])
 
     def typed_decl(self, typ, decl):
+        print(f"typed_decl: typ={typ}, decl={decl}")
         if isinstance(decl, Token):
             decl = IdentNode(str(decl))
-        return VarsDeclNode(typ, [decl])
+        return VarsDeclNode(typ, [decl] if not isinstance(decl, list) else decl)
 
     def func_decl(self, ret_type, name, params=None, body=None):
         if params is None:
@@ -219,7 +222,6 @@ class MelASTBuilder(Transformer):
         return FuncDeclNode(ret_type, name, params, body)
 
     def CNAME(self, token: Token):
-        print(f"Преобразование CNAME: {token} -> IdentNode")
         return IdentNode(str(token))
 
     def var_declaration(self, args):
@@ -233,8 +235,23 @@ class MelASTBuilder(Transformer):
     def prog(self, *stmts):
         return StmtListNode(list(stmts))
 
+    def member_access(self, *args):
+        # Ожидаем: [obj, DOT, member] или [obj, member]
+        if len(args) == 3:
+            obj, _, member = args  # Игнорируем DOT
+        elif len(args) == 2:
+            obj, member = args
+        else:
+            raise ValueError(f"Неверное количество аргументов для member_access: {args}")
+        if isinstance(obj, Token):
+            obj = IdentNode(str(obj))
+        if isinstance(member, Token):
+            member = IdentNode(str(member))
+        return MemberAccessNode(obj, member)
 
-def parse(prog: str)->StmtListNode:
+
+def parse(prog: str) -> StmtListNode:
     prog = parser.parse(str(prog))
     prog = MelASTBuilder().transform(prog)
+    print(f"DEBUG: Parsed AST: {prog.tree}")
     return prog

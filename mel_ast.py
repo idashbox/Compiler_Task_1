@@ -260,7 +260,7 @@ class IfNode(StmtNode):
 
     @property
     def children(self) -> Tuple[ExprNode, StmtNode]:
-        return (self.cond, self.then_stmt) + ((self.else_stmt, ) if self.else_stmt else tuple())
+        return (self.cond, self.then_stmt) + ((self.else_stmt,) if self.else_stmt else tuple())
 
     def __str__(self) -> str:
         return 'if'
@@ -346,6 +346,7 @@ class ArrayAccessNode(AstNode):
         s += self.index_expr._str(level + 1)
         return s
 
+
 class ArrayElementAssignNode(AstNode):
     def __init__(self, array: AstNode, index: AstNode, value: AstNode):
         self.array = array
@@ -369,6 +370,7 @@ class PrimitiveType:
 
 PRIMITIVE_TYPES = {"int", "float", "bool", "string"}
 
+
 class TypeDeclNode(AstNode):
     def __init__(self, typename):
         super().__init__()
@@ -380,9 +382,17 @@ class TypeDeclNode(AstNode):
             else:
                 self.type = typename
                 self.typename = name
-        elif isinstance(typename.name, ArrayTypeNode):
-            self.type = ArrayTypeNode(typename.name)
-            self.typename = str(typename)
+        elif isinstance(typename, str):
+            if typename.endswith("[]"):
+                base_type_name = typename[:-2]
+                if base_type_name in PRIMITIVE_TYPES:
+                    self.type = ArrayTypeNode(base_type_name)
+                else:
+                    self.type = ArrayTypeNode(typename)
+                self.typename = typename
+            else:
+                self.type = typename
+                self.typename = typename
         else:
             self.type = typename
             self.typename = str(typename)
@@ -393,6 +403,7 @@ class TypeDeclNode(AstNode):
     def __str__(self):
         return str(self.typename)
 
+
 class TypedDeclNode(StmtNode):
     def __init__(self, type_decl, assign_node):
         self.type_decl = type_decl  # TypeDeclNode
@@ -401,6 +412,7 @@ class TypedDeclNode(StmtNode):
     def __repr__(self):
         var_name = self.assign_node.ident.name if isinstance(self.assign_node, AssignNode) else "?"
         return f"TypedDeclNode({self.type_decl} {var_name})"
+
 
 class VarDeclarationNode(AstNode):
     def __init__(self, var_type, name, value=None):
@@ -413,6 +425,7 @@ class AssignmentNode(AstNode):
     def __init__(self, var_name, value):
         self.var_name = var_name
         self.value = value
+
 
 class ArrayTypeNode:
     def __init__(self, name):
@@ -478,6 +491,18 @@ class FuncDeclNode(StmtNode):
     def __str__(self) -> str:
         return f'func {self.name}'
 
+
+class NewInstanceNode(ExprNode):
+    def __init__(self, class_name: IdentNode):
+        super().__init__()
+        self.class_name = class_name
+
+    @property
+    def children(self) -> Tuple[IdentNode]:
+        return (self.class_name,)
+
+    def __str__(self) -> str:
+        return f'new {self.class_name}'
 
 
 class ReturnNode(StmtNode):

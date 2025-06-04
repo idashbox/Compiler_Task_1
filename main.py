@@ -12,10 +12,10 @@ def test_scope_and_types():
             int x = 5;
             bool true;
             if (true){
-                int x = "hello";
+                x = "hello";
             }
             ''',
-            "Ошибка: присвоение string в переменную типа int внутри блока"
+            "Type mismatch: cannot assign string to int"
         ),
         (
             '''
@@ -103,13 +103,24 @@ def main():
     bool result = c > 10 || b < 2;
     ''')
 
+    # prog = mel_parser.parse('''
+    #     class Point {
+    #         int x = 0;
+    #         int y = 0;
+    #     }
+    #     Point p;
+    #     p.x = 5;
+    # ''')
+
     prog = mel_parser.parse('''
-        class Point {
-            int x = 0;
-            int y = 0;
-        }
-        Point p;
-        p.x = "5";
+            class Point {
+                int x = 0;
+                int y = 0;
+            }
+            Point p2 = new Point();
+            Point p1 = new Point();
+            p1.x = 5;
+            p2.x = 10;
     ''')
 
     prog1 = mel_parser.parse('''
