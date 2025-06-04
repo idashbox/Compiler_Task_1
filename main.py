@@ -1,8 +1,18 @@
+import argparse
 import os
+import sys
+import traceback
+
 import mel_parser
 from interpreter import Interpreter
+from jbc import JbcCodeGenerator
 from scope import Scope
 from semantics import SemanticAnalyzer
+
+import os
+from semantics import SemanticAnalyzer
+from interpreter import Interpreter
+
 
 
 def test_scope_and_types():
@@ -80,75 +90,130 @@ def test_scope_and_types():
             print(f"Ошибка при анализе: {e}")
 
 
-def main():
-    test_scope_and_types()
+# def main():
+#     test_scope_and_types()
+#
+#     prog1 = mel_parser.parse('''
+#     class A {
+#         int x = 5;
+#         float y = 3.14;
+#         int[] arr = {1, 2, 3};
+#         arr[1] = 42;
+#         x = arr[2];
+#         string s = "Hello";
+#         int z;
+#         z = 5;
+#         z = 5 * 7;
+#     }''')
+#
+#     prog1 = mel_parser.parse('''
+#     int a = 5;
+#     int b = 3;
+#     int c = a + b * 2;
+#     bool result = c > 10 || b < 2;
+#     ''')
+#
+#     # prog = mel_parser.parse('''
+#     #     class Point {
+#     #         int x = 0;
+#     #         int y = 0;
+#     #     }
+#     #     Point p;
+#     #     p.x = 5;
+#     # ''')
+#
+#     prog = mel_parser.parse('''
+#             class Point {
+#                 int x = 0;
+#                 int y = 0;
+#             }
+#             Point p2 = new Point();
+#             Point p1 = new Point();
+#             p1.x = 5;
+#             p2.x = 10;
+#     ''')
+#
+#     prog1 = mel_parser.parse('''
+#         int sum(int a, int b) {
+#             return a + b;
+#         }
+#         int r = sum(3, 4);
+#     ''')
+#
+#     analyzer = SemanticAnalyzer()
+#
+#     analyzer.analyze(prog)
+#
+#     if analyzer.errors:
+#         print("Найдены ошибки семантики:")
+#         for err in analyzer.errors:
+#             print("-", err)
+#     else:
+#         print("Семантический анализ прошёл успешно")
+#
+#     print(*prog.tree, sep=os.linesep)
+#
+#     interpreter = Interpreter()
+#     result = interpreter.eval(prog)
+#
+#     print("Глобальные переменные после выполнения:")
+#     print(interpreter.variables)
 
-    prog1 = mel_parser.parse('''
-    class A {
-        int x = 5;
-        float y = 3.14;
-        int[] arr = {1, 2, 3};
-        arr[1] = 42;
-        x = arr[2];
-        string s = "Hello";
-        int z;
-        z = 5;
-        z = 5 * 7;
-    }''')
 
-    prog1 = mel_parser.parse('''
-    int a = 5;
-    int b = 3;
-    int c = a + b * 2;
-    bool result = c > 10 || b < 2;
-    ''')
+def execute(prog: str, jbc_only: bool = False, file_name: str = None):
+    try:
+        prog_ast = mel_parser.parse(prog)
+    except Exception as e:
+        print(f'Ошибка парсинга: {e}', file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
 
-    # prog = mel_parser.parse('''
-    #     class Point {
-    #         int x = 0;
-    #         int y = 0;
-    #     }
-    #     Point p;
-    #     p.x = 5;
-    # ''')
-
-    prog = mel_parser.parse('''
-            class Point {
-                int x = 0;
-                int y = 0;
-            }
-            Point p2 = new Point();
-            Point p1 = new Point();
-            p1.x = 5;
-            p2.x = 10;
-    ''')
-
-    prog1 = mel_parser.parse('''
-        int sum(int a, int b) {
-            return a + b;
-        }
-        int r = sum(3, 4);
-    ''')
+    if not jbc_only:
+        print('AST saved to ast_output.txt')
 
     analyzer = SemanticAnalyzer()
+    errors = analyzer.analyze(prog_ast)
+    if errors:
+        print('Ошибки семантики:')
+        for err in errors:
+            print(f'- {err}')
+        sys.exit(2)
+    elif not jbc_only:
+        print('Семантический анализ успешен')
 
-    analyzer.analyze(prog)
-
-    if analyzer.errors:
-        print("Найдены ошибки семантики:")
-        for err in analyzer.errors:
-            print("-", err)
+    if jbc_only:
+        try:
+            gen = JbcCodeGenerator(file_name)
+            gen.gen_program(prog_ast)
+            # Сохраняем .jbc в файл
+            with open(file_name.replace('.mel', '.jbc'), 'w', encoding='utf-8') as f:
+                for line in gen.code:
+                    f.write(line + '\n')
+            # Выводим код в консоль
+            print(*gen.code, sep=os.linesep)
+        except Exception as e:
+            print(f'Ошибка генерации JBC: {e}', file=sys.stderr)
+            sys.exit(4)
     else:
-        print("Семантический анализ прошёл успешно")
+        interpreter = Interpreter()
+        interpreter.eval(prog_ast)
+        print("Глобальные переменные после выполнения:")
+        print(interpreter.variables)
 
-    print(*prog.tree, sep=os.linesep)
 
-    interpreter = Interpreter()
-    result = interpreter.eval(prog)
+def main():
+    parser = argparse.ArgumentParser(description='Compiler demo program')
+    parser.add_argument('src', type=str, help='source code file')
+    parser.add_argument('--jbc-only', action='store_true', help='print only Java bytecode')
+    args = parser.parse_args()
 
-    print("Глобальные переменные после выполнения:")
-    print(interpreter.variables)
+    with open(args.src, mode='r', encoding="utf-8") as f:
+        src = f.read()
+
+    execute(src, args.jbc_only, args.src)
 
 
 if __name__ == "__main__":
     main()
+
+

@@ -253,5 +253,5 @@ class MelASTBuilder(Transformer):
 def parse(prog: str) -> StmtListNode:
     prog = parser.parse(str(prog))
     prog = MelASTBuilder().transform(prog)
-    print(f"DEBUG: Parsed AST: {prog.tree}")
+    #print(f"DEBUG: Parsed AST: {prog.tree}")
     return prog
