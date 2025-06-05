@@ -1,6 +1,7 @@
 from lark import Lark, Transformer, Token
 from mel_ast import *
 
+
 parser = Lark('''
     %import common.NUMBER
     %import common.CNAME
@@ -233,7 +234,14 @@ class MelASTBuilder(Transformer):
         return AssignmentNode(name, value)
 
     def prog(self, *stmts):
-        return StmtListNode(list(stmts))
+        # Распаковываем операторы, чтобы избежать вложенных списков
+        flat_stmts = []
+        for stmt in stmts:
+            if isinstance(stmt, list):
+                flat_stmts.extend(stmt)
+            else:
+                flat_stmts.append(stmt)
+        return StmtListNode(*flat_stmts)
 
     def member_access(self, *args):
         # Ожидаем: [obj, DOT, member] или [obj, member]

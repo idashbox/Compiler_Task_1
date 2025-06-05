@@ -439,7 +439,14 @@ class VarsDeclNode(StmtNode):
     def __init__(self, type_node: 'TypeDeclNode', *vars: IdentNode):
         super().__init__()
         self.type = type_node
-        self.vars = list(vars)  # исправим на list
+        # Распаковываем vars, чтобы избежать вложенных списков
+        flat_vars = []
+        for var in vars:
+            if isinstance(var, list):
+                flat_vars.extend(var)
+            else:
+                flat_vars.append(var)
+        self.vars = flat_vars
 
     @property
     def children(self) -> Tuple[AstNode, ...]:

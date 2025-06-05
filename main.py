@@ -1,16 +1,15 @@
 import argparse
 import os
 import sys
-import traceback
 
 import mel_parser
-from interpreter import Interpreter
-from jbc import JbcCodeGenerator
 from scope import Scope
-from semantics import SemanticAnalyzer
 
-import os
+
+import traceback
+from mel_parser import parse  # Явный импорт parse из mel_parser
 from semantics import SemanticAnalyzer
+from jbc import JbcCodeGenerator
 from interpreter import Interpreter
 
 
@@ -163,10 +162,9 @@ def test_scope_and_types():
 #     print("Глобальные переменные после выполнения:")
 #     print(interpreter.variables)
 
-
-def execute(prog: str, jbc_only: bool = False, file_name: str = None):
+def execute(prog: str, jbc_only: bool = False, file_name: str = None, output_file: str = None):
     try:
-        prog_ast = mel_parser.parse(prog)
+        prog_ast = parse(prog)
     except Exception as e:
         print(f'Ошибка парсинга: {e}', file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
@@ -188,13 +186,13 @@ def execute(prog: str, jbc_only: bool = False, file_name: str = None):
     if jbc_only:
         try:
             gen = JbcCodeGenerator(file_name)
+            gen.current_scope = analyzer.current_scope  # Передаём область видимости
             gen.gen_program(prog_ast)
-            # Сохраняем .jbc в файл
-            with open(file_name.replace('.mel', '.jbc'), 'w', encoding='utf-8') as f:
+            # Сохраняем .jbc в указанный выходной файл
+            output_path = output_file if output_file else file_name.replace('.mel', '.jbc')
+            with open(output_path, 'w', encoding='utf-8') as f:
                 for line in gen.code:
                     f.write(line + '\n')
-            # Выводим код в консоль
-            print(*gen.code, sep=os.linesep)
         except Exception as e:
             print(f'Ошибка генерации JBC: {e}', file=sys.stderr)
             sys.exit(4)
@@ -204,20 +202,18 @@ def execute(prog: str, jbc_only: bool = False, file_name: str = None):
         print("Глобальные переменные после выполнения:")
         print(interpreter.variables)
 
-
 def main():
     parser = argparse.ArgumentParser(description='Compiler demo program')
     parser.add_argument('src', type=str, help='source code file')
+    parser.add_argument('output', type=str, nargs='?', default=None, help='output jbc file (optional)')
     parser.add_argument('--jbc-only', action='store_true', help='print only Java bytecode')
     args = parser.parse_args()
 
     with open(args.src, mode='r', encoding="utf-8") as f:
         src = f.read()
 
-    execute(src, args.jbc_only, args.src)
-
+    execute(src, args.jbc_only, args.src, args.output)
 
 if __name__ == "__main__":
     main()
-
 

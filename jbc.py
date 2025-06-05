@@ -1,4 +1,3 @@
-# jbc.py
 from typing import Any, List, Union
 from pathlib import Path
 from mel_ast import *
@@ -53,6 +52,7 @@ class JbcCodeGenerator(CodeGenerator):
             self.class_name = f'_{self.class_name}'
         self.local_var_offset = 0
         self.global_var_index = 0
+        self.global_vars = {}  # Словарь для хранения типов глобальных переменных
 
     def start(self):
         self.add('version 6;')
@@ -72,6 +72,28 @@ class JbcCodeGenerator(CodeGenerator):
         elif type_name == 'string':
             self.add('ldc', f'"{value}"')
 
+    def get_type_from_node(self, node: ExprNode) -> Type:
+        if isinstance(node, LiteralNode):
+            return node.get_type()
+        elif isinstance(node, IdentNode):
+            # Сначала проверяем global_vars
+            if node.name in self.global_vars:
+                return self.global_vars[node.name]
+            # Затем проверяем current_scope
+            var_type = self.current_scope.lookup(node.name) if self.current_scope else None
+            if not var_type:
+                raise JbcException(f"Variable {node.name} not found")
+            return var_type
+        elif isinstance(node, BinOpNode):
+            return self.get_type_from_node(node.arg1)
+        elif isinstance(node, FuncCallNode):
+            func_info = self.functions.get(node.func.name)
+            if not func_info:
+                raise JbcException(f"Function {node.func.name} not found")
+            return func_info['return_type']
+        else:
+            raise JbcException(f"Cannot determine type for node {type(node).__name__}")
+
     def visit(self, node):
         method_name = f'jbc_{type(node).__name__}'
         method = getattr(self, method_name, self.generic_jbc)
@@ -87,9 +109,13 @@ class JbcCodeGenerator(CodeGenerator):
         self.push_const(type_name, node.value)
 
     def jbc_IdentNode(self, node: IdentNode):
-        var_type = self.current_scope.lookup(node.name) if self.current_scope else None
-        if not var_type:
-            raise JbcException(f"Variable {node.name} not found")
+        # Проверяем global_vars или current_scope
+        if node.name in self.global_vars:
+            var_type = self.global_vars[node.name]
+        else:
+            var_type = self.current_scope.lookup(node.name) if self.current_scope else None
+            if not var_type:
+                raise JbcException(f"Variable {node.name} not found")
         type_name = var_type.name
         if hasattr(node, 'jbc_offset'):
             self.add(f'{JBC_TYPE_PREFIXES[type_name]}load', node.jbc_offset)
@@ -99,9 +125,12 @@ class JbcCodeGenerator(CodeGenerator):
     def jbc_AssignNode(self, node: AssignNode):
         self.visit(node.val)
         if isinstance(node.var, IdentNode):
-            var_type = self.current_scope.lookup(node.var.name) if self.current_scope else None
-            if not var_type:
-                raise JbcException(f"Variable {node.var.name} not found")
+            if node.var.name in self.global_vars:
+                var_type = self.global_vars[node.var.name]
+            else:
+                var_type = self.current_scope.lookup(node.var.name) if self.current_scope else None
+                if not var_type:
+                    raise JbcException(f"Variable {node.var.name} not found")
             type_name = var_type.name
             if hasattr(node.var, 'jbc_offset'):
                 self.add(f'{JBC_TYPE_PREFIXES[type_name]}store', node.var.jbc_offset)
@@ -160,7 +189,7 @@ class JbcCodeGenerator(CodeGenerator):
         if node.func.name == 'println':
             param_type = self.get_type_from_node(node.params[0]).name if node.params else 'void'
             java_type = JBC_TYPE_NAMES.get(param_type, 'java.lang.Object')
-            self.add(f'invokestatic {RUNTIME_CLASS_NAME}#void println({java_type})')
+            self.add(f'invokestatic {RUNTIME_CLASS_NAME}/println({java_type})V')
         else:
             func_info = self.functions.get(node.func.name)
             if not func_info:
@@ -233,13 +262,25 @@ class JbcCodeGenerator(CodeGenerator):
         self.start()
         global_vars = find_vars_decls(prog)
         for node in global_vars:
+            var_type = get_type_from_typename(node.type.typename)
+            vars_flat = []
             for var in node.vars:
-                var_name = var.name if isinstance(var, IdentNode) else var.var.name
-                var_type = JBC_TYPE_NAMES[node.type.typename]
-                self.add(f'public static {var_type} _gv{var_name};')
-        for stmt in prog.stmts:
-            if isinstance(stmt, FuncDeclNode):
-                self.visit(stmt)
+                if isinstance(var, list):
+                    vars_flat.extend(var)
+                else:
+                    vars_flat.append(var)
+            for var in vars_flat:
+                if isinstance(var, IdentNode):
+                    var_name = var.name
+                    self.global_vars[var_name] = var_type  # Регистрируем глобальную переменную
+                    self.add(f'public static {JBC_TYPE_NAMES[var_type.name]} _gv{var_name};')
+                elif isinstance(var, AssignNode):
+                    var_name = var.var.name
+                    self.global_vars[var_name] = var_type  # Регистрируем глобальную переменную
+                    self.add(f'public static {JBC_TYPE_NAMES[var_type.name]} _gv{var_name};')
+                    self.visit(var)
+                else:
+                    raise JbcException(f"Unexpected var type in VarsDeclNode: {type(var)}")
         self.add('')
         self.add('public static void main(java.lang.String[])')
         self.add('{')
@@ -248,4 +289,7 @@ class JbcCodeGenerator(CodeGenerator):
                 self.visit(stmt)
         self.add('return')
         self.add('}')
+        for stmt in prog.stmts:
+            if isinstance(stmt, (FuncDeclNode, ClassDeclNode)):
+                self.visit(stmt)
         self.end()

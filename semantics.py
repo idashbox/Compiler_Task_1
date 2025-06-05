@@ -9,7 +9,13 @@ class SemanticAnalyzer:
         self.current_scope = Scope()
         self.global_scope = self.current_scope
         self.classes = {}
-        self.functions = {}
+        self.functions = {
+            'println': {
+                'return_type': PrimitiveType('void'),
+                'param_types': [PrimitiveType('int')],  # Поддержка println(int)
+                'node': None  # Встроенная функция, нет AST-узла
+            }
+        }
         self._visited_nodes = set()
 
     def get_type_from_node(self, node):
@@ -53,17 +59,24 @@ class SemanticAnalyzer:
             return self.visit_NewInstanceNode(node)
         elif isinstance(node, MemberAccessNode):
             obj_type = self.get_type_from_node(node.obj)
-            print(f"DEBUG: MemberAccessNode: obj={node.obj}, obj_type={obj_type}, member={node.member.name}")
             if isinstance(obj_type, ClassType):
                 class_info = self.classes.get(obj_type.name)
-                print(f"DEBUG: class_info for {obj_type.name} = {class_info}")
                 if class_info:
                     field_type = class_info['fields'].get(node.member.name)
-                    print(f"DEBUG: field_type for {node.member.name} = {field_type}")
                     if field_type:
                         return field_type
                     self.errors.append(f"Field '{node.member.name}' not found in class '{obj_type.name}'")
             return None
+        elif isinstance(node, BinOpNode):
+            left_type = self.get_type_from_node(node.arg1)
+            right_type = self.get_type_from_node(node.arg2)
+            if left_type and right_type:
+                if left_type == right_type:
+                    if node.op in [BinOp.EQ, BinOp.NE, BinOp.GT, BinOp.LT, BinOp.GE, BinOp.LE]:
+                        return PrimitiveType("bool")
+                    return left_type
+                self.errors.append(f"Type mismatch in binary operation: {left_type} and {right_type}")
+            return PrimitiveType("int")  # Fallback
         return None
 
     def visit_NewInstanceNode(self, node):
