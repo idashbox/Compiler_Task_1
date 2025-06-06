@@ -15,4 +15,15 @@ int quot = x / y;
 println(sum);   // Выведет: 20
 println(diff);  // Выведет: 10
 println(prod);  // Выведет: 75
-println(quot);  // Выведет: 3 
+println(quot);  // Выведет: 3
+
+
+class Point {
+    int x = 0;
+    int y = 0;
+}
+Point p2 = new Point();
+Point p1 = new Point();
+p1.x = 5;
+p2.x = 10;
+println(p1.x);

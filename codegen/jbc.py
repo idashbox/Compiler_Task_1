@@ -1,4 +1,6 @@
 from typing import Dict, Any, Optional
+
+from mel_types import ClassType
 from .base import CodeGenBase
 from mel_ast import *
 
@@ -11,6 +13,9 @@ class JBCGenerator(CodeGenBase):
         self.current_class = None
         self.current_method = None
         self.encoding = 'utf-8'
+        self.variable_types = {}  # Словарь для хранения типов переменных
+        self.classes = {}  # Словарь для хранения информации о классах
+
         
     def get_label(self) -> str:
         """Генерирует уникальную метку"""
@@ -93,18 +98,51 @@ class JBCGenerator(CodeGenBase):
         elif node.op == UnaryOp.NOT:
             self.emit("iconst_1")
             self.emit("ixor")
-            
+
     def visit_assign(self, node: AssignNode) -> None:
-        node.val.visit(self)
-        if isinstance(node.var, IdentNode):
-            if node.var.name in self.locals:
-                index = self.locals[node.var.name]
-                if index <= 3:
-                    self.emit(f"istore_{index}")
-                else:
-                    self.emit(f"istore {index}")
+        if isinstance(node.var, MemberAccessNode):
+            # Загружаем объект
+            if isinstance(node.var.obj, IdentNode):
+                index = self.locals.get(node.var.obj.name)
+                if index is not None:
+                    if index <= 3:
+                        self.emit(f"aload_{index}")
+                    else:
+                        self.emit(f"aload {index}")
             else:
-                self.emit(f"putstatic {self.current_class}/{node.var.name} I")
+                self.visit(node.var.obj)
+
+            # Загружаем значение
+            if isinstance(node.val, LiteralNode):
+                self.visit_literal(node.val)
+            else:
+                self.visit(node.val)
+
+            # Присваиваем значение полю
+            class_type = self.get_variable_type(node.var.obj.name)
+            if class_type:
+                class_name = class_type.name if hasattr(class_type, 'name') else "Object"
+                field_name = node.var.member.name
+                self.emit(f"putfield {class_name}/{field_name} I")  # Предполагаем, что поле имеет тип int
+        else:
+            # Обычное присваивание переменной
+            if isinstance(node.val, LiteralNode):
+                self.visit_literal(node.val)
+            elif isinstance(node.val, BinOpNode):
+                self.visit_bin_op(node.val)
+            else:
+                self.visit(node.val)
+
+            # Сохраняем в переменную
+            if isinstance(node.var, IdentNode):
+                if node.var.name in self.locals:
+                    index = self.locals[node.var.name]
+                    if index <= 3:
+                        self.emit(f"istore_{index}")
+                    else:
+                        self.emit(f"istore {index}")
+                else:
+                    self.emit(f"putstatic {self.current_class}/{node.var.name} I")
                 
     def visit_if(self, node: IfNode) -> None:
         else_label = self.get_label()
@@ -275,38 +313,76 @@ class JBCGenerator(CodeGenBase):
 
     def emit(self, instruction: str) -> None:
         self.code.append(instruction)
-        
+
     def __call__(self, node: AstNode) -> None:
         self.code = []
         self.locals = {}
+        self.variable_types = {}
+        self.classes = {}
         self.current_class = "Program"
-        
-        # Генерируем заголовок класса
+
+        # Сначала проходим и собираем информацию о классах
+        if isinstance(node, StmtListNode):
+            for stmt in node.stmts[0]:
+                if isinstance(stmt, ClassDeclNode):
+                    # Сохраняем информацию о классе для последующего использования
+                    class_name = stmt.name.name
+                    self.classes[class_name] = {'fields': {}}
+
+                    # Анализируем поля класса
+                    if stmt.body:
+                        for class_stmt in stmt.body.stmts:
+                            if isinstance(class_stmt, VarsDeclNode):
+                                field_type = "I"  # По умолчанию int
+                                for var in class_stmt.vars:
+                                    if isinstance(var, list):
+                                        for v in var:
+                                            if isinstance(v, IdentNode):
+                                                field_name = v.name
+                                                self.classes[class_name]['fields'][field_name] = field_type
+                                    elif isinstance(var, IdentNode):
+                                        field_name = var.name
+                                        self.classes[class_name]['fields'][field_name] = field_type
+                                    elif isinstance(var, AssignNode):
+                                        field_name = var.var.name
+                                        self.classes[class_name]['fields'][field_name] = field_type
+
+                    # Генерируем класс в отдельный файл
+                    self.visit_ClassDeclNode(stmt)
+
+        # Теперь генерируем основной класс Program
+        self.code = []  # Очищаем код перед генерацией Program
         self.emit(".class public Program")
         self.emit(".super java/lang/Object")
-        
+
         # Конструктор
         self.emit(".method public <init>()V")
         self.emit("aload_0")
         self.emit("invokespecial java/lang/Object/<init>()V")
         self.emit("return")
         self.emit(".end method")
-        
+
         # Метод main
         self.emit(".method public static main([Ljava/lang/String;)V")
         self.emit(".limit stack 100")
         self.emit(".limit locals 100")
-        
+
         # Генерируем код для узла AST
         if isinstance(node, StmtListNode):
             for stmt in node.stmts[0]:
-                self.visit(stmt)
+                if not isinstance(stmt, ClassDeclNode):  # Пропускаем объявления классов
+                    self.visit(stmt)
         else:
             self.visit(node)
-        
+
         # Завершаем метод main
         self.emit("return")
         self.emit(".end method")
+
+        # Сохраняем основной класс
+        with open("Program.j", 'w', encoding='utf-8') as f:
+            f.write('\n'.join(self.code))
+        print("Основной класс сохранен в файл Program.j")
 
     def visit(self, node: AstNode) -> None:
         if isinstance(node, LiteralNode):
@@ -325,59 +401,85 @@ class JBCGenerator(CodeGenBase):
             self.visit_stmt_list(node)
         elif isinstance(node, TypedDeclNode):
             self.visit_TypedDeclNode(node)
+        elif isinstance(node, ClassDeclNode):  # Добавь этот блок
+            self.visit_ClassDeclNode(node)
+        elif isinstance(node, NewInstanceNode):  # Добавь этот блок
+            self.visit_new_instance(node)
+        elif isinstance(node, MemberAccessNode):  # Добавь этот блок
+            self.visit_member_access(node)
         else:
             print(f"Warning: No visit method for {node.__class__.__name__}")
-            
+
     def visit_VarsDeclNode(self, node: VarsDeclNode) -> None:
+        # Определяем тип переменных
+        var_type = None
+        if node.type.typename == "int":
+            var_type = PrimitiveType("int")
+        elif node.type.typename == "float":
+            var_type = PrimitiveType("float")
+        elif node.type.typename == "string":
+            var_type = PrimitiveType("string")
+        elif node.type.typename == "bool":
+            var_type = PrimitiveType("bool")
+        else:
+            # Это класс - важно для переменных типа Point
+            var_type = ClassType(node.type.typename)
+
+        # Обработка переменных как и раньше
         for var in node.vars:
             if isinstance(var, list):
                 for v in var:
                     if isinstance(v, AssignNode):
+                        # Сохраняем тип переменной
+                        self.variable_types[v.var.name] = var_type
+
                         # Загружаем значение
                         if isinstance(v.val, LiteralNode):
                             self.visit_literal(v.val)
                         elif isinstance(v.val, BinOpNode):
                             self.visit_bin_op(v.val)
+                        elif isinstance(v.val, NewInstanceNode):
+                            self.visit_new_instance(v.val)
                         else:
                             self.visit(v.val)
-                        # Сохраняем в локальную переменную
+
+                        # Сохраняем в переменную
                         self.locals[v.var.name] = len(self.locals)
                         index = self.locals[v.var.name]
-                        if index <= 3:
-                            self.emit(f"istore_{index}")
+
+                        # Выбираем правильную инструкцию в зависимости от типа
+                        if isinstance(var_type, ClassType):
+                            if index <= 3:
+                                self.emit(f"astore_{index}")
+                            else:
+                                self.emit(f"astore {index}")
                         else:
-                            self.emit(f"istore {index}")
+                            if index <= 3:
+                                self.emit(f"istore_{index}")
+                            else:
+                                self.emit(f"istore {index}")
+
                     elif isinstance(v, IdentNode):
+                        # Сохраняем тип переменной
+                        self.variable_types[v.name] = var_type
+
                         self.locals[v.name] = len(self.locals)
                         index = self.locals[v.name]
-                        self.emit("iconst_0")
-                        if index <= 3:
-                            self.emit(f"istore_{index}")
+
+                        # Инициализация по умолчанию зависит от типа
+                        if isinstance(var_type, ClassType):
+                            self.emit("aconst_null")
+                            if index <= 3:
+                                self.emit(f"astore_{index}")
+                            else:
+                                self.emit(f"astore {index}")
                         else:
-                            self.emit(f"istore {index}")
-            elif isinstance(var, AssignNode):
-                # Загружаем значение
-                if isinstance(var.val, LiteralNode):
-                    self.visit_literal(var.val)
-                elif isinstance(var.val, BinOpNode):
-                    self.visit_bin_op(var.val)
-                else:
-                    self.visit(var.val)
-                # Сохраняем в локальную переменную
-                self.locals[var.var.name] = len(self.locals)
-                index = self.locals[var.var.name]
-                if index <= 3:
-                    self.emit(f"istore_{index}")
-                else:
-                    self.emit(f"istore {index}")
-            elif isinstance(var, IdentNode):
-                self.locals[var.name] = len(self.locals)
-                index = self.locals[var.name]
-                self.emit("iconst_0")
-                if index <= 3:
-                    self.emit(f"istore_{index}")
-                else:
-                    self.emit(f"istore {index}")
+                            self.emit("iconst_0")
+                            if index <= 3:
+                                self.emit(f"istore_{index}")
+                            else:
+                                self.emit(f"istore {index}")
+            # ... аналогично для случая, когда var не является списком
                     
     def visit_TypedDeclNode(self, node: TypedDeclNode) -> None:
         if isinstance(node.assign_node, AssignNode):
@@ -392,4 +494,129 @@ class JBCGenerator(CodeGenBase):
             if index <= 3:
                 self.emit(f"istore_{index}")
             else:
-                self.emit(f"istore {index}") 
+                self.emit(f"istore {index}")
+
+    def visit_ClassDeclNode(self, node: ClassDeclNode) -> None:
+        class_name = node.name.name
+
+        # Сохраняем текущий код
+        main_code = self.code.copy()
+        self.code = []  # Очищаем для генерации класса
+
+        # Генерируем код класса
+        self.emit(f".class public {class_name}")
+        self.emit(".super java/lang/Object")
+
+        # Объявляем поля класса - ВАЖНО! Без этого полей не будет
+        if node.body:
+            for stmt in node.body.stmts:
+                if isinstance(stmt, VarsDeclNode):
+                    field_type = "I"  # По умолчанию int
+                    for var in stmt.vars:
+                        if isinstance(var, list):
+                            for v in var:
+                                if isinstance(v, IdentNode):
+                                    field_name = v.name
+                                    # Явно объявляем поле как public с типом I (int)
+                                    self.emit(f".field public {field_name} I")
+                                elif isinstance(v, AssignNode):
+                                    field_name = v.var.name
+                                    self.emit(f".field public {field_name} I")
+                        elif isinstance(var, IdentNode):
+                            field_name = var.name
+                            self.emit(f".field public {field_name} I")
+                        elif isinstance(var, AssignNode):
+                            field_name = var.var.name
+                            self.emit(f".field public {field_name} I")
+
+        # Генерируем конструктор по умолчанию
+        self.emit(".method public <init>()V")
+        self.emit(".limit stack 10")  # Ограничиваем размер стека
+        self.emit(".limit locals 1")  # this - единственная локальная переменная
+        self.emit("aload_0")
+        self.emit("invokespecial java/lang/Object/<init>()V")
+
+        # Инициализируем поля в конструкторе
+        if node.body:
+            for stmt in node.body.stmts:
+                if isinstance(stmt, VarsDeclNode):
+                    for var in stmt.vars:
+                        if isinstance(var, list):
+                            for v in var:
+                                if isinstance(v, AssignNode):
+                                    field_name = v.var.name
+                                    self.emit("aload_0")  # загружаем this
+                                    if isinstance(v.val, LiteralNode):
+                                        self.visit_literal(v.val)
+                                    else:
+                                        self.visit(v.val)
+                                    # Присваиваем значение полю
+                                    self.emit(f"putfield {class_name}/{field_name} I")
+                                elif isinstance(v, IdentNode):
+                                    # Для полей без инициализации присваиваем 0
+                                    field_name = v.name
+                                    self.emit("aload_0")
+                                    self.emit("iconst_0")
+                                    self.emit(f"putfield {class_name}/{field_name} I")
+                        elif isinstance(var, AssignNode):
+                            field_name = var.var.name
+                            self.emit("aload_0")
+                            if isinstance(var.val, LiteralNode):
+                                self.visit_literal(var.val)
+                            else:
+                                self.visit(var.val)
+                            self.emit(f"putfield {class_name}/{field_name} I")
+                        elif isinstance(var, IdentNode):
+                            # Для полей без инициализации присваиваем 0
+                            field_name = var.name
+                            self.emit("aload_0")
+                            self.emit("iconst_0")
+                            self.emit(f"putfield {class_name}/{field_name} I")
+
+        self.emit("return")
+        self.emit(".end method")
+
+        # Сохраняем код класса в отдельный файл
+        with open(f"{class_name}.j", 'w', encoding='utf-8') as f:
+            f.write('\n'.join(self.code))
+        print(f"Класс {class_name} сохранен в файл {class_name}.j")
+
+        # Восстанавливаем основной код
+        self.code = main_code
+
+
+
+    def visit_NewInstanceNode(self, node: NewInstanceNode) -> None:
+        class_name = node.class_name.name
+        # Создаем новый экземпляр класса
+        self.emit(f"new {class_name}")
+        self.emit("dup")
+        self.emit(f"invokespecial {class_name}/<init>()V")
+
+    def visit_MemberAccessNode(self, node: MemberAccessNode) -> None:
+        # Загружаем объект
+        if isinstance(node.obj, IdentNode):
+            index = self.locals.get(node.obj.name)
+            if index is not None:
+                if index <= 3:
+                    self.emit(f"aload_{index}")
+                else:
+                    self.emit(f"aload {index}")
+        else:
+            self.visit(node.obj)
+
+        # Получаем поле объекта
+        class_type = self.get_variable_type(node.obj.name)
+        if class_type:
+            class_name = class_type.name if hasattr(class_type, 'name') else "Object"
+            field_name = node.member.name
+            self.emit(f"getfield {class_name}/{field_name} I")  # Предполагаем, что поле имеет тип int
+
+    def get_variable_type(self, var_name):
+        """Возвращает тип переменной из локальной таблицы символов"""
+        # Сначала проверяем в словаре локальных типов
+        if var_name in self.variable_types:
+            return self.variable_types[var_name]
+
+        # По умолчанию возвращаем int, если тип не найден
+        return PrimitiveType("int")

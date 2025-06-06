@@ -35,8 +35,8 @@ def main():
             print(f"Генерация кода: visit_StmtListNode для {ast}")
             generator = JBCGenerator()
             generator(ast)
-            with open('mel.j', 'w', encoding='utf-8') as f:
-                f.write('\n'.join(generator.code))
+            # with open('mel.j', 'w', encoding='utf-8') as f:
+            #     f.write('\n'.join(generator.code))
             print(f"StmtListNode: {len(ast.stmts)} переменных, адресов {id(ast)}, stmts: {ast.stmts}")
     except Exception as e:
         print(f"Compilation error: {e}", file=sys.stderr)

@@ -1,25 +1,17 @@
 @echo off
 setlocal
 
-rem Проверяем, передан ли файл в качестве аргумента
-if "%~1"=="" (
-    echo Usage: %0 ^<file.j^>
-    exit /b 1
+rem Удаляем старый mel.j, если он существует
+if exist mel.j (
+    echo Удаление устаревшего файла mel.j...
+    del mel.j
 )
 
-rem Проверяем существование файла
-if not exist "%~1" (
-    echo Error: File %~1 not found
-    exit /b 1
-)
-
-rem Компилируем .j файл в .class файл с помощью Jasmin
-java -jar runtime-java/jasmin.jar "%~1"
-
-rem Проверяем успешность компиляции
-if errorlevel 1 (
-    echo Error: Compilation failed
-    exit /b 1
+rem Компилируем все .j файлы
+echo Компиляция всех .j файлов...
+for %%f in (Point.j Program.j) do (
+    echo Компиляция %%f...
+    java -jar runtime-java/jasmin.jar "%%f"
 )
 
 echo Compilation successful 
