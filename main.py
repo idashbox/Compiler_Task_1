@@ -6,6 +6,16 @@ from mel_parser import parse
 from semantics import SemanticAnalyzer
 from codegen.jbc import JBCGenerator
 
+
+# del mel.j
+#
+# python main.py test.mel --target jvm
+#
+# .\compile-java.bat
+#
+# java Program
+
+
 def main():
     parser = argparse.ArgumentParser(description='Mel compiler.')
     parser.add_argument('source', help='Source file')
