@@ -11,7 +11,6 @@ parser = Lark('''
     %import common.ESCAPED_STRING
 
     %ignore WS
-    %ignore DOT
     COMMENT: CPP_COMMENT | C_COMMENT
     %ignore COMMENT
 
@@ -34,6 +33,7 @@ parser = Lark('''
         | "(" expr ")"
         | array_index
         | new_expr
+        | member_access
 
     ?array_index: CNAME "[" expr "]" -> array_index
 

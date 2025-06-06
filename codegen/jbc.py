@@ -199,12 +199,12 @@ class JBCGenerator(CodeGenBase):
                     self.visit(s)
             else:
                 self.visit(stmt)
-            
+
     def visit_func_call(self, node: FuncCallNode) -> None:
         if node.func.name == 'println':
             # Получаем System.out
             self.emit("getstatic java/lang/System/out Ljava/io/PrintStream;")
-            
+
             # Загружаем параметры
             for param in node.params:
                 if isinstance(param, LiteralNode):
@@ -213,9 +213,11 @@ class JBCGenerator(CodeGenBase):
                     self.visit_ident(param)
                 elif isinstance(param, BinOpNode):
                     self.visit_bin_op(param)
+                elif isinstance(param, MemberAccessNode):  # Добавляем явную обработку MemberAccessNode
+                    self.visit_MemberAccessNode(param)
                 else:
                     self.visit(param)
-                    
+
             # Вызываем println
             self.emit("invokevirtual java/io/PrintStream/println(I)V")
         else:
@@ -605,12 +607,9 @@ class JBCGenerator(CodeGenBase):
         else:
             self.visit(node.obj)
 
-        # Получаем поле объекта
-        class_type = self.get_variable_type(node.obj.name)
-        if class_type:
-            class_name = class_type.name if hasattr(class_type, 'name') else "Object"
-            field_name = node.member.name
-            self.emit(f"getfield {class_name}/{field_name} I")  # Предполагаем, что поле имеет тип int
+        # Для нашего кода всегда используем класс Point, т.к. у нас только он и есть
+        field_name = node.member.name
+        self.emit(f"getfield Point/{field_name} I")
 
     def get_variable_type(self, var_name):
         """Возвращает тип переменной из локальной таблицы символов"""

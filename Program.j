@@ -66,7 +66,8 @@ aload 9
 bipush 10
 putfield Point/x I
 getstatic java/lang/System/out Ljava/io/PrintStream;
-iload 9
+aload 10
+getfield Point/x I
 invokevirtual java/io/PrintStream/println(I)V
 return
 .end method
