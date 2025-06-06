@@ -75,5 +75,16 @@ def get_type_from_typename(typename: str) -> Type:
 
 
 def equals_simple_type(type1: Type, type2: Type) -> bool:
-    """Сравнивает непосредственно объекты типов."""
-    return type1 == type2
+    if type1 is None or type2 is None:
+        return False
+    if isinstance(type1, PrimitiveType) and type1.name == "any":
+        return True
+    if isinstance(type2, PrimitiveType) and type2.name == "any":
+        return True
+    if isinstance(type1, PrimitiveType) and isinstance(type2, PrimitiveType):
+        return type1.name == type2.name
+    if isinstance(type1, ArrayType) and isinstance(type2, ArrayType):
+        return equals_simple_type(type1.base_type, type2.base_type)
+    if isinstance(type1, ClassType) and isinstance(type2, ClassType):
+        return type1.name == type2.name
+    return False

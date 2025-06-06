@@ -68,7 +68,7 @@ parser = Lark('''
 
     ?expr: or
 
-    func_call: CNAME "(" (expr ("," expr)*)? ")"
+    func_call: CNAME "(" (expr ("," expr)*)? ")" -> func_call
     vars_decl: "var" type_decl var_decl ("," var_decl)*
     param_decl_list: param_decl ("," param_decl)*
 
@@ -248,6 +248,14 @@ class MelASTBuilder(Transformer):
         if isinstance(member, Token):
             member = IdentNode(str(member))
         return MemberAccessNode(obj, member)
+
+    def func_call(self, name, *args):
+        """Обрабатывает вызов функции"""
+        if isinstance(name, Token):
+            name = IdentNode(str(name))
+        if len(args) == 1 and isinstance(args[0], tuple):
+            args = args[0]
+        return FuncCallNode(name, *args)
 
 
 def parse(prog: str) -> StmtListNode:

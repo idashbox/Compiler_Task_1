@@ -1,0 +1,15 @@
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\bin\Debug\net8.0\MelCompiler.exe
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\bin\Debug\net8.0\MelCompiler.deps.json
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\bin\Debug\net8.0\MelCompiler.runtimeconfig.json
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\bin\Debug\net8.0\MelCompiler.dll
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\bin\Debug\net8.0\MelCompiler.pdb
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\obj\Debug\net8.0\MelCompiler.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\obj\Debug\net8.0\MelCompiler.AssemblyInfoInputs.cache
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\obj\Debug\net8.0\MelCompiler.AssemblyInfo.cs
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\obj\Debug\net8.0\MelCompiler.csproj.CoreCompileInputs.cache
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\obj\Debug\net8.0\MelCompiler.sourcelink.json
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\obj\Debug\net8.0\MelCompiler.dll
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\obj\Debug\net8.0\refint\MelCompiler.dll
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\obj\Debug\net8.0\MelCompiler.pdb
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\obj\Debug\net8.0\MelCompiler.genruntimeconfig.cache
+C:\Users\agapo\Downloads\CompilerDemoPyparsing.2025\Compiler_Task_1\MelCompiler\obj\Debug\net8.0\ref\MelCompiler.dll

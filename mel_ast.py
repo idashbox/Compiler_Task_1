@@ -30,9 +30,21 @@ class AstNode(ABC):
         return tuple(res)
 
     def visit(self, func: Callable[['AstNode'], None]) -> None:
+        """Обходит AST и вызывает func для каждого узла"""
+        if not hasattr(self, '_visited'):
+            self._visited = set()
+        if id(self) in self._visited:
+            return
+        self._visited.add(id(self))
+        
         func(self)
         for child in self.children:
-            child.visit(func)
+            if isinstance(child, list):
+                for item in child:
+                    if isinstance(item, AstNode):
+                        item.visit(func)
+            elif isinstance(child, AstNode):
+                child.visit(func)
 
     def get_type(self):
         return None

@@ -9,7 +9,23 @@ class SemanticAnalyzer:
         self.current_scope = Scope()
         self.global_scope = self.current_scope
         self.classes = {}
-        self.functions = {}
+        self.functions = {
+            'println': {
+                'return_type': PrimitiveType("void"),
+                'param_types': [PrimitiveType("any")],
+                'builtin': True
+            },
+            'print': {
+                'return_type': PrimitiveType("void"),
+                'param_types': [PrimitiveType("any")],
+                'builtin': True
+            },
+            'convert': {
+                'return_type': PrimitiveType("string"),
+                'param_types': [PrimitiveType("any")],
+                'builtin': True
+            }
+        }
         self._visited_nodes = set()
 
     def get_type_from_node(self, node):
@@ -98,6 +114,9 @@ class SemanticAnalyzer:
                     self.errors.append(str(e))
             elif isinstance(var, AssignNode):
                 if isinstance(var.var, MemberAccessNode):
+                    if id(var.val) not in self._visited_nodes:
+                        self._visited_nodes.add(id(var.val))
+                        self.visit(var.val)
                     value_type = self.get_type_from_node(var.val)
                     member_type = self.get_type_from_node(var.var)
                     print(f"Присваивание полю {var.var}: ожидается {member_type}, получено {value_type}")
@@ -109,9 +128,8 @@ class SemanticAnalyzer:
                         self._visited_nodes.add(id(var.val))
                         self.visit(var.val)
                     value_type = self.get_type_from_node(var.val)
-                    print(
-                        f"Объявление переменной: {var_name} типа {var_type} с присваиванием {value_type} в области {id(self.current_scope)}")
-                    if not equals_simple_type(var_type, value_type):
+                    print(f"Объявление переменной: {var_name} типа {var_type} с присваиванием {value_type} в области {id(self.current_scope)}")
+                    if value_type and not equals_simple_type(var_type, value_type):
                         self.errors.append(f"Type mismatch: cannot assign {value_type} to {var_type}")
                     try:
                         self.current_scope.declare(var_name, var_type)
@@ -135,10 +153,13 @@ class SemanticAnalyzer:
                 f"Expected {len(expected_param_types)} arguments for '{func_name}', got {len(actual_args)}")
             return None
         for i, (arg, expected_type) in enumerate(zip(actual_args, expected_param_types)):
+            if id(arg) not in self._visited_nodes:
+                self._visited_nodes.add(id(arg))
+                self.visit(arg)
             arg_type = self.get_type_from_node(arg)
             print(f"Аргумент {i + 1}: ожидается {expected_type}, получено {arg_type}")
-            if not equals_simple_type(arg_type, expected_type):
-                self.errors.append("Ошибка: передан аргумент string вместо int")
+            if expected_type.name != "any" and not equals_simple_type(arg_type, expected_type):
+                self.errors.append(f"Type mismatch: cannot pass {arg_type} to {expected_type}")
         return func_info['return_type']
 
     def visit_AssignNode(self, node):
@@ -326,3 +347,30 @@ class SemanticAnalyzer:
         if isinstance(type1, ClassType) and isinstance(type2, ClassType):
             return type1.name == type2.name
         return type1 == type2
+
+    def visit_bin_op(self, node: BinOpNode) -> None:
+        print(f"Обрабатываем BinOpNode: {node}")
+        if id(node.arg1) not in self._visited_nodes:
+            self._visited_nodes.add(id(node.arg1))
+            self.visit(node.arg1)
+        if id(node.arg2) not in self._visited_nodes:
+            self._visited_nodes.add(id(node.arg2))
+            self.visit(node.arg2)
+        type1 = self.get_type_from_node(node.arg1)
+        type2 = self.get_type_from_node(node.arg2)
+        print(f"Типы операндов: {type1} и {type2}")
+        if not equals_simple_type(type1, type2):
+            self.errors.append(f"Type mismatch in binary operation: {type1} and {type2}")
+        if node.op in [BinOp.ADD, BinOp.SUB, BinOp.MUL, BinOp.DIV, BinOp.MOD]:
+            if not isinstance(type1, PrimitiveType) or type1.name not in ["int", "float"]:
+                self.errors.append(f"Arithmetic operation not supported for type {type1}")
+                return None
+            return type1
+        elif node.op in [BinOp.GT, BinOp.GE, BinOp.LT, BinOp.LE, BinOp.EQ, BinOp.NE]:
+            return PrimitiveType("bool")
+        elif node.op in [BinOp.AND, BinOp.OR]:
+            if not isinstance(type1, PrimitiveType) or type1.name != "bool":
+                self.errors.append(f"Logical operation not supported for type {type1}")
+                return None
+            return PrimitiveType("bool")
+        return None
