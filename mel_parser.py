@@ -30,10 +30,13 @@ parser = Lark('''
     ?group: literal
         | CNAME
         | func_call
+        | method_call
         | "(" expr ")"
         | array_index
         | new_expr
         | member_access
+
+    method_call: CNAME DOT CNAME "(" (expr ("," expr)*)? ")" -> method_call
 
     ?array_index: CNAME "[" expr "]" -> array_index
 
@@ -98,8 +101,8 @@ parser = Lark('''
       | "return" expr            -> return
       | type_decl var_decl       -> typed_decl
       | func_call
+      | method_call
       | vars_decl
-
 
     ?stmt2: "{" stmt_list "}"
         | "while" "(" expr ")" stmt              -> while
@@ -198,9 +201,14 @@ class MelASTBuilder(Transformer):
         return NewInstanceNode(class_name)
 
     def class_decl(self, name, body=None):
+        if isinstance(name, Token):
+            name = IdentNode(str(name))
         if body is None:
             body = StmtListNode()
         return ClassDeclNode(name, body)
+
+    def class_body(self, *stmts):
+        return StmtListNode(*stmts)
 
     def param_decl_list(self, *args):
         return ParamDeclListNode(list(args))
@@ -208,11 +216,12 @@ class MelASTBuilder(Transformer):
     def param_decl(self, typ, name):
         return VarsDeclNode(typ, [name])
 
-    def typed_decl(self, typ, decl):
-        print(f"typed_decl: typ={typ}, decl={decl}")
-        if isinstance(decl, Token):
-            decl = IdentNode(str(decl))
-        return VarsDeclNode(typ, [decl] if not isinstance(decl, list) else decl)
+    def typed_decl(self, typ, name, value=None):
+        if isinstance(name, Token):
+            name = IdentNode(str(name))
+        if value is None:
+            return TypedDeclNode(typ, name)
+        return TypedDeclNode(typ, AssignNode(name, value))
 
     def func_decl(self, ret_type, name, params=None, body=None):
         if params is None:
@@ -257,9 +266,20 @@ class MelASTBuilder(Transformer):
             args = args[0]
         return FuncCallNode(name, *args)
 
+    def method_call(self, obj, method, *args):
+        """Обрабатывает вызов метода"""
+        if isinstance(obj, Token):
+            obj = IdentNode(str(obj))
+        if isinstance(method, Token):
+            method = IdentNode(str(method))
+        if len(args) == 1 and isinstance(args[0], tuple):
+            args = args[0]
+        return MethodCallNode(obj, method, *args)
+
 
 def parse(prog: str) -> StmtListNode:
+    print(f"DEBUG: Parsing program: {prog}")
     prog = parser.parse(str(prog))
     prog = MelASTBuilder().transform(prog)
-    print(f"DEBUG: Parsed AST: {prog.tree}")
+    print(f"DEBUG: Parsed AST: {prog}")
     return prog

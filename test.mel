@@ -18,12 +18,47 @@ println(prod);  // Выведет: 75
 println(quot);  // Выведет: 3
 
 
-class Point {
-    int x = 0;
-    int y = 0;
+class Fibonacci {
+    int a = 0;
+    int b = 1;
+    
+    int next() {
+        int temp = b;
+        b = a + b;
+        a = temp;
+        return a;
+    }
 }
-Point p2 = new Point();
-Point p1 = new Point();
-p1.x = 5;
-p2.x = 10;
-println(p1.x);
+
+// Создаем объект для вычисления чисел Фибоначчи
+Fibonacci fib = new Fibonacci();
+
+// Выводим первые 10 чисел Фибоначчи
+println(fib.a);  // 0
+
+fib.next();
+println(fib.a);  // 1
+
+fib.next();
+println(fib.a);  // 1
+
+fib.next();
+println(fib.a);  // 2
+
+fib.next();
+println(fib.a);  // 3
+
+fib.next();
+println(fib.a);  // 5
+
+fib.next();
+println(fib.a);  // 8
+
+fib.next();
+println(fib.a);  // 13
+
+fib.next();
+println(fib.a);  // 21
+
+fib.next();
+println(fib.a);  // 34

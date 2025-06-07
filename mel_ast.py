@@ -193,17 +193,32 @@ class ClassDeclNode(StmtNode):
 
 
 class MemberAccessNode(ExprNode):
-    def __init__(self, obj: ExprNode, member: IdentNode):
+    def __init__(self, obj: IdentNode, member: IdentNode):
         super().__init__()
         self.obj = obj
         self.member = member
 
+    def __str__(self) -> str:
+        return f"{self.obj}.{self.member}"
+
     @property
-    def children(self) -> Tuple[ExprNode, IdentNode]:
+    def children(self) -> Tuple[ExprNode, ...]:
         return self.obj, self.member
 
+
+class MethodCallNode(ExprNode):
+    def __init__(self, obj: IdentNode, method: IdentNode, *args: ExprNode):
+        super().__init__()
+        self.obj = obj
+        self.method = method
+        self.args = args
+
     def __str__(self) -> str:
-        return f'{self.obj}.{self.member}'
+        return f"{self.obj}.{self.method}({', '.join(str(arg) for arg in self.args)})"
+
+    @property
+    def children(self) -> Tuple[ExprNode, ...]:
+        return (self.obj, self.method) + self.args
 
 
 class BinOpNode(ExprNode):
@@ -419,11 +434,18 @@ class TypeDeclNode(AstNode):
 class TypedDeclNode(StmtNode):
     def __init__(self, type_decl, assign_node):
         self.type_decl = type_decl  # TypeDeclNode
-        self.assign_node = assign_node  # AssignNode
+        self.assign_node = assign_node  # AssignNode или IdentNode
 
     def __repr__(self):
-        var_name = self.assign_node.ident.name if isinstance(self.assign_node, AssignNode) else "?"
+        var_name = self.assign_node.name if isinstance(self.assign_node, IdentNode) else self.assign_node.var.name
         return f"TypedDeclNode({self.type_decl} {var_name})"
+
+    def __str__(self):
+        return f"typed_decl ({self.type_decl})"
+
+    @property
+    def children(self) -> Tuple[AstNode, ...]:
+        return (self.type_decl, self.assign_node)
 
 
 class VarDeclarationNode(AstNode):

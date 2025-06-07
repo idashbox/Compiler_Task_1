@@ -51,23 +51,69 @@ invokevirtual java/io/PrintStream/println(I)V
 getstatic java/lang/System/out Ljava/io/PrintStream;
 iload 8
 invokevirtual java/io/PrintStream/println(I)V
-new Point
+new Fibonacci
 dup
-invokespecial Point/<init>()V
+invokespecial Fibonacci/<init>()V
 astore 9
-new Point
-dup
-invokespecial Point/<init>()V
-astore 10
-aload 10
-iconst_5
-putfield Point/x I
-aload 9
-bipush 10
-putfield Point/x I
 getstatic java/lang/System/out Ljava/io/PrintStream;
-aload 10
-getfield Point/x I
+aload 9
+getfield Fibonacci/a I
+invokevirtual java/io/PrintStream/println(I)V
+aload 9
+invokevirtual Fibonacci/next()I
+pop
+getstatic java/lang/System/out Ljava/io/PrintStream;
+aload 9
+getfield Fibonacci/a I
+invokevirtual java/io/PrintStream/println(I)V
+aload 9
+invokevirtual Fibonacci/next()I
+pop
+getstatic java/lang/System/out Ljava/io/PrintStream;
+aload 9
+getfield Fibonacci/a I
+invokevirtual java/io/PrintStream/println(I)V
+aload 9
+invokevirtual Fibonacci/next()I
+pop
+getstatic java/lang/System/out Ljava/io/PrintStream;
+aload 9
+getfield Fibonacci/a I
+invokevirtual java/io/PrintStream/println(I)V
+aload 9
+invokevirtual Fibonacci/next()I
+pop
+getstatic java/lang/System/out Ljava/io/PrintStream;
+aload 9
+getfield Fibonacci/a I
+invokevirtual java/io/PrintStream/println(I)V
+aload 9
+invokevirtual Fibonacci/next()I
+pop
+getstatic java/lang/System/out Ljava/io/PrintStream;
+aload 9
+getfield Fibonacci/a I
+invokevirtual java/io/PrintStream/println(I)V
+aload 9
+invokevirtual Fibonacci/next()I
+pop
+getstatic java/lang/System/out Ljava/io/PrintStream;
+aload 9
+getfield Fibonacci/a I
+invokevirtual java/io/PrintStream/println(I)V
+aload 9
+invokevirtual Fibonacci/next()I
+pop
+getstatic java/lang/System/out Ljava/io/PrintStream;
+aload 9
+getfield Fibonacci/a I
+invokevirtual java/io/PrintStream/println(I)V
+aload 9
+invokevirtual Fibonacci/next()I
+pop
+getstatic java/lang/System/out Ljava/io/PrintStream;
+aload 9
+getfield Fibonacci/a I
 invokevirtual java/io/PrintStream/println(I)V
 return
 .end method

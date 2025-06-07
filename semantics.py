@@ -3,6 +3,50 @@ from scope import Scope
 from mel_types import PrimitiveType, ArrayType, ClassType, Type, equals_simple_type, get_type_from_typename, INT
 
 
+class SimpleType:
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return self.name
+
+    def __eq__(self, other):
+        if not isinstance(other, SimpleType):
+            return False
+        return self.name == other.name
+
+class ClassType:
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return f"class {self.name}"
+
+    def __eq__(self, other):
+        if not isinstance(other, ClassType):
+            return False
+        return self.name == other.name
+
+def get_type_from_typename(typename):
+    if typename == 'int':
+        return SimpleType('int')
+    elif typename == 'string':
+        return SimpleType('string')
+    elif typename == 'bool':
+        return SimpleType('bool')
+    else:
+        return ClassType(typename)
+
+def equals_simple_type(type1, type2):
+    if type1 is None or type2 is None:
+        return False
+    if isinstance(type1, SimpleType) and isinstance(type2, SimpleType):
+        return type1.name == type2.name
+    if isinstance(type1, ClassType) and isinstance(type2, ClassType):
+        return type1.name == type2.name
+    return False
+
+
 class SemanticAnalyzer:
     def __init__(self):
         self.errors = []
@@ -86,10 +130,8 @@ class SemanticAnalyzer:
         print(f"Обрабатываем NewInstanceNode: {node}")
         class_name = node.class_name.name
         if class_name not in self.classes:
-            self.errors.append(f"Ошибка: класс '{class_name}' не определён")
+            self.errors.append(f"Class {class_name} not found")
             return None
-        # Здесь можно добавить проверку, что конструктор без параметров существует,
-        # но в вашем языке конструкторы не определены явно, поэтому просто возвращаем тип класса
         return ClassType(class_name)
 
     def visit_VarsDeclNode(self, node):
@@ -163,35 +205,44 @@ class SemanticAnalyzer:
         return func_info['return_type']
 
     def visit_AssignNode(self, node):
-        if isinstance(node.var, MemberAccessNode):
-            member_type = self.get_type_from_node(node.var)
-            value_type = self.get_type_from_node(node.val)
-            print(f"Присваивание полю {node.var}: ожидается {member_type}, получено {value_type}")
-            if member_type and value_type and not self.equals_simple(node.var, node.val):
-                self.errors.append(f"Ошибка: присвоение {value_type} полю {node.var} типа {member_type}")
-            if id(node.val) not in self._visited_nodes:
-                self._visited_nodes.add(id(node.val))
-                self.visit(node.val)
-        else:
+        print(f"Вызываем метод: visit_AssignNode для {node}")
+        if isinstance(node.var, IdentNode):
             var_name = node.var.name
             print(f"Поиск переменной '{var_name}' в области {id(self.current_scope)}")
-            var_type = None
-            current_scope = self.current_scope
-            while current_scope:
-                var_type = current_scope.lookup(var_name)
-                print(f"Проверяем область {id(current_scope)}: {var_type}")
-                if var_type:
-                    break
-                current_scope = current_scope.parent
-            if not var_type:
-                self.errors.append(f"Ошибка: переменная '{var_name}' не объявлена")
-                return
+            var_type = self.current_scope.lookup(var_name)
+            print(f"Поиск {var_name} в области {id(self.current_scope)}: {var_type}")
+            print(f"Проверяем область {id(self.current_scope)}: {var_type}")
+            if var_type is None:
+                self.errors.append(f"Variable {var_name} not declared")
+                return None
             if id(node.val) not in self._visited_nodes:
                 self._visited_nodes.add(id(node.val))
-                self.visit(node.val)
-            value_type = self.get_type_from_node(node.val)
-            if not self.equals_simple(node.var, node.val):
-                self.errors.append(f"Ошибка: присвоение {value_type} переменной '{var_name}' типа {var_type}")
+                val_type = self.visit(node.val)
+                if not equals_simple_type(var_type, val_type):
+                    self.errors.append(f"Type mismatch: cannot assign {val_type} to {var_type}")
+            return var_type
+        elif isinstance(node.var, MemberAccessNode):
+            obj_type = self.get_type_from_node(node.var.obj)
+            if not isinstance(obj_type, ClassType):
+                self.errors.append(f"Cannot access member on non-class type {obj_type}")
+                return None
+            class_info = self.classes.get(obj_type.name)
+            if not class_info:
+                self.errors.append(f"Class {obj_type.name} not found")
+                return None
+            field_type = class_info['fields'].get(node.var.member.name)
+            if not field_type:
+                self.errors.append(f"Field {node.var.member.name} not found in class {obj_type.name}")
+                return None
+            if id(node.val) not in self._visited_nodes:
+                self._visited_nodes.add(id(node.val))
+                val_type = self.visit(node.val)
+                if not equals_simple_type(field_type, val_type):
+                    self.errors.append(f"Type mismatch: cannot assign {val_type} to {field_type}")
+            return field_type
+        else:
+            self.errors.append(f"Invalid assignment target: {node.var}")
+            return None
 
     def analyze(self, node):
         print(f"Анализируем узел: {node}")
@@ -247,24 +298,23 @@ class SemanticAnalyzer:
         func_name = node.name.name
         return_type = get_type_from_typename(node.return_type.typename)
         param_types = []
-        for param in node.params.vars:
-            param_type = get_type_from_typename(param.type.typename)
-            param_types.append(param_type)
+        if node.params:
+            for param in node.params.vars:
+                param_type = get_type_from_typename(param.type.typename)
+                param_types.append(param_type)
         self.functions[func_name] = {
             'return_type': return_type,
-            'param_types': param_types,
-            'node': node
+            'param_types': param_types
         }
-        print(f"Функция {func_name} сохранена с возвращаемым типом {return_type} и параметрами {param_types}")
-        old_scope = self.current_scope
-        self.current_scope = Scope(parent=old_scope)
-        print(f"Создана область для функции: {id(self.current_scope)}, родитель: {id(old_scope)}")
-        for param, param_type in zip(node.params.vars, param_types):
-            for var in param.vars:
-                if isinstance(var, IdentNode):
-                    self.current_scope.declare(var.name, param_type)
-        self.visit(node.body)
-        self.current_scope = old_scope
+        if node.body:
+            old_scope = self.current_scope
+            self.current_scope = Scope(old_scope)
+            if node.params:
+                for param in node.params.vars:
+                    param_type = get_type_from_typename(param.type.typename)
+                    self.current_scope.declare(param.name, param_type)
+            self.visit(node.body)
+            self.current_scope = old_scope
 
     def visit_ArrayAssignNode(self, node):
         print(f"Обрабатываем ArrayAssignNode: {node}")
@@ -296,36 +346,64 @@ class SemanticAnalyzer:
     def visit_ClassDeclNode(self, node):
         print(f"Обрабатываем ClassDeclNode: {node}")
         class_name = node.name.name
-        self.classes[class_name] = {'fields': {}}
+        if class_name in self.classes:
+            self.errors.append(f"Class {class_name} already defined")
+            return
+
+        # Создаем новую область видимости для класса
         old_scope = self.current_scope
-        self.current_scope = Scope(parent=old_scope)
-        print(f"Создана область для класса {class_name}: {id(self.current_scope)}")
-        for stmt in node.body.stmts:
-            if isinstance(stmt, VarsDeclNode):
-                var_type = get_type_from_typename(stmt.type.typename)
-                vars_flat = []
-                for var in stmt.vars:
-                    if isinstance(var, list):
-                        vars_flat.extend(var)
+        self.current_scope = Scope(old_scope)
+
+        # Собираем информацию о полях и методах класса
+        fields = {}
+        methods = {}
+
+        if node.body and hasattr(node.body, 'stmts'):
+            for stmt in node.body.stmts:
+                if isinstance(stmt, TypedDeclNode):
+                    var_type = get_type_from_typename(stmt.type_decl.typename)
+                    if isinstance(stmt.assign_node, AssignNode):
+                        fields[stmt.assign_node.var.name] = var_type
                     else:
-                        vars_flat.append(var)
-                for var in vars_flat:
-                    if isinstance(var, IdentNode):
-                        var_name = var.name
-                        self.classes[class_name]['fields'][var_name] = var_type
-                        print(f"Добавлено поле {var_name}: {var_type} в класс {class_name}")
-                    elif isinstance(var, AssignNode):
-                        var_name = var.var.name
-                        value_type = self.get_type_from_node(var.val)
-                        if not self.equals_simple(var.var, var.val):
-                            self.errors.append(
-                                f"Type mismatch in field {var_name}: cannot assign {value_type} to {var_type}")
-                        self.classes[class_name]['fields'][var_name] = var_type
-                        print(f"Добавлено поле {var_name}: {var_type} в класс {class_name}")
-                    else:
-                        print(f"DEBUG: Неожиданный тип var: {type(var)} в stmt.vars")
-        print(f"DEBUG: После обработки класса {class_name}: {self.classes}")
+                        fields[stmt.assign_node.name] = var_type
+                elif isinstance(stmt, FuncDeclNode):
+                    method_name = stmt.name.name
+                    return_type = get_type_from_typename(stmt.return_type.typename)
+                    param_types = []
+                    if stmt.params and hasattr(stmt.params, 'stmts'):
+                        for param in stmt.params.stmts:
+                            if isinstance(param, TypedDeclNode):
+                                param_type = get_type_from_typename(param.type_decl.typename)
+                                param_types.append(param_type)
+                    methods[method_name] = {
+                        'return_type': return_type,
+                        'param_types': param_types
+                    }
+
+        self.classes[class_name] = {
+            'fields': fields,
+            'methods': methods
+        }
+
+        # Восстанавливаем предыдущую область видимости
         self.current_scope = old_scope
+
+        # Добавляем тип класса в текущую область видимости
+        self.current_scope.declare(class_name, ClassType(class_name))
+
+    def visit_TypedDeclNode(self, node):
+        print(f"Вызываем метод: visit_TypedDeclNode для {node}")
+        var_type = get_type_from_typename(node.type_decl.typename)
+        if isinstance(node.assign_node, AssignNode):
+            var_name = node.assign_node.var.name
+            self.current_scope.declare(var_name, var_type)
+            if id(node.assign_node) not in self._visited_nodes:
+                self._visited_nodes.add(id(node.assign_node))
+                self.visit(node.assign_node)
+        else:
+            var_name = node.assign_node.name
+            self.current_scope.declare(var_name, var_type)
+        return var_type
 
     def generic_visit(self, node):
         if hasattr(node, 'children'):
@@ -374,3 +452,66 @@ class SemanticAnalyzer:
                 return None
             return PrimitiveType("bool")
         return None
+
+    def visit_MethodCallNode(self, node):
+        print(f"Обрабатываем MethodCallNode: {node}")
+        obj_type = self.get_type_from_node(node.obj)
+        if not isinstance(obj_type, ClassType):
+            self.errors.append(f"Cannot call method on non-class type {obj_type}")
+            return None
+
+        class_info = self.classes.get(obj_type.name)
+        if not class_info:
+            self.errors.append(f"Class {obj_type.name} not found")
+            return None
+
+        method_info = class_info['methods'].get('next')
+        if not method_info:
+            self.errors.append(f"Method next not found in class {obj_type.name}")
+            return None
+
+        return method_info['return_type']
+
+    def visit_MemberAccessNode(self, node):
+        print(f"Обрабатываем MemberAccessNode: {node}")
+        obj_type = self.get_type_from_node(node.obj)
+        if not isinstance(obj_type, ClassType):
+            self.errors.append(f"Cannot access member on non-class type {obj_type}")
+            return None
+
+        class_info = self.classes.get(obj_type.name)
+        if not class_info:
+            self.errors.append(f"Class {obj_type.name} not found")
+            return None
+
+        field_type = class_info['fields'].get(node.member.name)
+        if not field_type:
+            self.errors.append(f"Field {node.member.name} not found in class {obj_type.name}")
+            return None
+
+        return field_type
+
+    def visit_BinOpNode(self, node):
+        print(f"Вызываем метод: visit_BinOpNode для {node.op}")
+        left_type = self.get_type_from_node(node.arg1)
+        right_type = self.get_type_from_node(node.arg2)
+
+        if left_type is None or right_type is None:
+            return None
+
+        if left_type.name == 'int' and right_type.name == 'int':
+            return left_type
+        else:
+            self.errors.append(f"Cannot perform operation {node.op} on types {left_type} and {right_type}")
+            return None
+
+    def visit_LiteralNode(self, node):
+        print(f"Вызываем метод: visit_LiteralNode для {node.value}")
+        if isinstance(node.value, int):
+            return SimpleType('int')
+        elif isinstance(node.value, str):
+            return SimpleType('string')
+        elif isinstance(node.value, bool):
+            return SimpleType('bool')
+        else:
+            return None

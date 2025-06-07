@@ -409,6 +409,8 @@ class JBCGenerator(CodeGenBase):
             self.visit_new_instance(node)
         elif isinstance(node, MemberAccessNode):  # Добавь этот блок
             self.visit_member_access(node)
+        elif isinstance(node, MethodCallNode):
+            self.visit_method_call(node)
         else:
             print(f"Warning: No visit method for {node.__class__.__name__}")
 
@@ -586,8 +588,6 @@ class JBCGenerator(CodeGenBase):
         # Восстанавливаем основной код
         self.code = main_code
 
-
-
     def visit_NewInstanceNode(self, node: NewInstanceNode) -> None:
         class_name = node.class_name.name
         # Создаем новый экземпляр класса
@@ -619,3 +619,31 @@ class JBCGenerator(CodeGenBase):
 
         # По умолчанию возвращаем int, если тип не найден
         return PrimitiveType("int")
+
+    def visit_method_call(self, node: MethodCallNode) -> None:
+        # Загружаем объект
+        if isinstance(node.obj, IdentNode):
+            index = self.locals.get(node.obj.name)
+            if index is not None:
+                if index <= 3:
+                    self.emit(f"aload_{index}")
+                else:
+                    self.emit(f"aload {index}")
+        else:
+            self.visit(node.obj)
+
+        # Загружаем аргументы
+        for arg in node.args:
+            if isinstance(arg, LiteralNode):
+                self.visit_literal(arg)
+            else:
+                self.visit(arg)
+
+        # Вызываем метод
+        obj_type = self.get_variable_type(node.obj.name)
+        if obj_type and isinstance(obj_type, ClassType):
+            class_name = obj_type.name
+            method_name = node.method.name
+            # Предполагаем, что все методы возвращают int и принимают int
+            param_types = "I" * len(node.args)
+            self.emit(f"invokevirtual {class_name}/{method_name}({param_types})I")
